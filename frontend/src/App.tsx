@@ -24,6 +24,7 @@ export default function App() {
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   const selectedChapter = useMemo(
     () => project?.chapters.find((chapter) => chapter.id === selectedChapterId) ?? null,
@@ -48,8 +49,11 @@ export default function App() {
 
   async function runBusy(action: () => Promise<void>) {
     setBusy(true);
+    setError(null);
     try {
       await action();
+    } catch (err) {
+      setError(err instanceof Error ? err.message : "操作失败");
     } finally {
       setBusy(false);
     }
@@ -129,6 +133,7 @@ export default function App() {
         editorContent={editorContent}
         idea={idea}
         busy={busy}
+        error={error}
         onIdeaChange={setIdea}
         onCreateProject={handleCreateProject}
         onEditorChange={setEditorContent}

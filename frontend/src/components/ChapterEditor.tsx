@@ -7,6 +7,7 @@ interface ChapterEditorProps {
   editorContent: string;
   idea: string;
   busy: boolean;
+  error: string | null;
   onIdeaChange: (value: string) => void;
   onCreateProject: () => void;
   onEditorChange: (value: string) => void;
@@ -21,6 +22,7 @@ export function ChapterEditor({
   editorContent,
   idea,
   busy,
+  error,
   onIdeaChange,
   onCreateProject,
   onEditorChange,
@@ -31,6 +33,11 @@ export function ChapterEditor({
 }: ChapterEditorProps) {
   return (
     <main className="editor" aria-label="正文">
+      {error ? (
+        <div className="app-alert" role="alert">
+          {error}
+        </div>
+      ) : null}
       {!chapter ? (
         <ProjectCreator idea={idea} busy={busy} onIdeaChange={onIdeaChange} onCreate={onCreateProject} />
       ) : (

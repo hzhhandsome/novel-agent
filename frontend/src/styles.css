@@ -179,6 +179,17 @@ button:disabled {
   gap: 12px;
 }
 
+.app-alert {
+  max-width: 720px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #c85f43;
+  border-radius: 8px;
+  background: #fff3ee;
+  color: #7a2e1d;
+  line-height: 1.5;
+}
+
 .project-creator textarea,
 .chapter-textarea,
 .inspiration-input {

@@ -25,7 +25,7 @@ export function ProjectCreator({ idea, busy, onIdeaChange, onCreate }: ProjectCr
       />
       <button className="primary-button" type="submit" disabled={busy || !idea.trim()} title="生成项目">
         <Wand2 size={16} />
-        <span>生成项目</span>
+        <span>{busy ? "生成中" : "生成项目"}</span>
       </button>
     </form>
   );
