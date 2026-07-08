@@ -6,7 +6,8 @@ from sqlalchemy.orm import Session, selectinload
 from app.agent.chapter_graph import build_chapter_generation_graph, persist_generation_result
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus
-from app.services.model_provider import MockModelProvider, ModelProvider
+from app.services.model_provider import ModelProvider
+from app.services.provider_factory import get_model_provider
 
 
 def generate_chapter_candidate(
@@ -122,7 +123,7 @@ def _run_generation_task(
     provider: ModelProvider | None,
 ) -> GenerationTask:
     task = get_generation_task(session, task_id)
-    graph = build_chapter_generation_graph(session, provider or MockModelProvider())
+    graph = build_chapter_generation_graph(session, provider or get_model_provider())
     initial_state = {
         "task_id": task.id,
         "project_id": task.project_id,

@@ -1,3 +1,7 @@
+import os
+
+os.environ["NOVEL_AGENT_MODEL_PROVIDER"] = "mock"
+
 import app.models  # noqa: F401
 import pytest
 from fastapi.testclient import TestClient

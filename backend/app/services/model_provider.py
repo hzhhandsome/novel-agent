@@ -1,7 +1,9 @@
 from __future__ import annotations
 
+import json
 from dataclasses import dataclass
-from typing import Protocol
+from typing import Any, Callable, Protocol
+from urllib import request
 
 
 @dataclass(frozen=True)
@@ -66,6 +68,155 @@ class ModelProvider(Protocol):
 
     def summarize_chapter(self, content: str) -> str:
         raise NotImplementedError
+
+
+Transport = Callable[[str, dict[str, str], dict[str, Any]], dict[str, Any]]
+
+
+class DeepSeekAnthropicProvider:
+    def __init__(
+        self,
+        api_key: str,
+        base_url: str,
+        model: str,
+        max_tokens: int = 4096,
+        transport: Transport | None = None,
+    ) -> None:
+        if not api_key:
+            raise ValueError("DeepSeek API key is required")
+        self.api_key = api_key
+        self.base_url = base_url.rstrip("/")
+        self.model = model
+        self.max_tokens = max_tokens
+        self.transport = transport or self._default_transport
+
+    def generate_project_setup(self, idea: str) -> ProjectSetupResult:
+        payload = self._call_json(
+            system="你是小说策划助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "基于这个小说想法生成项目设定。JSON 字段必须包含："
+                "title, positioning, worldview, main_plot, characters, chapters。"
+                "characters 每项包含 name, role, personality, current_goal, key_memories, relationships, writing_notes。"
+                "chapters 每项包含 number, title。"
+                f"\n小说想法：{idea}"
+            ),
+        )
+        return ProjectSetupResult(
+            title=str(payload["title"]),
+            positioning=str(payload["positioning"]),
+            worldview=str(payload["worldview"]),
+            main_plot=str(payload["main_plot"]),
+            characters=[
+                CharacterDraft(
+                    name=str(item["name"]),
+                    role=str(item["role"]),
+                    personality=str(item["personality"]),
+                    current_goal=str(item["current_goal"]),
+                    key_memories=str(item["key_memories"]),
+                    relationships=str(item["relationships"]),
+                    writing_notes=str(item["writing_notes"]),
+                )
+                for item in payload["characters"]
+            ],
+            chapters=[
+                ChapterPlanDraft(number=int(item["number"]), title=str(item["title"]))
+                for item in payload["chapters"]
+            ],
+        )
+
+    def generate_chapter(self, prompt_package: str) -> ChapterGenerationResult:
+        payload = self._call_json(
+            system="你是小说章节写作助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "根据提示包生成章节候选稿。JSON 字段必须包含："
+                "content, summary, character_updates, foreshadowing_updates。"
+                f"\n提示包：{prompt_package}"
+            ),
+        )
+        return ChapterGenerationResult(
+            content=str(payload["content"]),
+            summary=str(payload["summary"]),
+            character_updates=[str(item) for item in payload.get("character_updates", [])],
+            foreshadowing_updates=[str(item) for item in payload.get("foreshadowing_updates", [])],
+        )
+
+    def review_chapter(self, content: str, prompt_package: str) -> list[ReviewFindingDraft]:
+        payload = self._call_json(
+            system="你是小说章节审核助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "审核章节是否有连贯性、设定冲突和节奏问题。"
+                "JSON 字段必须包含 findings 数组，每项包含 problem_type, message, suggestion, blocking。"
+                f"\n提示包：{prompt_package}\n章节正文：{content}"
+            ),
+        )
+        return [
+            ReviewFindingDraft(
+                problem_type=str(item["problem_type"]),
+                message=str(item["message"]),
+                suggestion=str(item["suggestion"]),
+                blocking=bool(item.get("blocking", False)),
+            )
+            for item in payload.get("findings", [])
+        ]
+
+    def summarize_chapter(self, content: str) -> str:
+        payload = self._call_json(
+            system="你是小说章节摘要助手。只输出合法 JSON，不要输出 Markdown。",
+            user=f"为下面章节写一句可供后续章节引用的摘要。JSON 字段必须包含 summary。\n章节正文：{content}",
+        )
+        return str(payload["summary"])
+
+    def _call_json(self, system: str, user: str) -> dict[str, Any]:
+        response = self.transport(
+            f"{self.base_url}/v1/messages",
+            {
+                "Content-Type": "application/json",
+                "x-api-key": self.api_key,
+                "anthropic-version": "2023-06-01",
+            },
+            {
+                "model": self.model,
+                "max_tokens": self.max_tokens,
+                "system": system,
+                "messages": [{"role": "user", "content": user}],
+            },
+        )
+        text = self._extract_text(response)
+        return self._parse_json_object(text)
+
+    @staticmethod
+    def _extract_text(response: dict[str, Any]) -> str:
+        content = response.get("content", [])
+        if isinstance(content, list):
+            return "\n".join(str(item.get("text", "")) for item in content if isinstance(item, dict)).strip()
+        return str(content)
+
+    @staticmethod
+    def _parse_json_object(text: str) -> dict[str, Any]:
+        stripped = text.strip()
+        if stripped.startswith("```"):
+            stripped = stripped.strip("`")
+            if stripped.startswith("json"):
+                stripped = stripped[4:].strip()
+        start = stripped.find("{")
+        end = stripped.rfind("}")
+        if start == -1 or end == -1 or end < start:
+            raise ValueError("model response did not contain a JSON object")
+        parsed = json.loads(stripped[start : end + 1])
+        if not isinstance(parsed, dict):
+            raise ValueError("model response JSON must be an object")
+        return parsed
+
+    @staticmethod
+    def _default_transport(url: str, headers: dict[str, str], payload: dict[str, Any]) -> dict[str, Any]:
+        data = json.dumps(payload, ensure_ascii=False).encode("utf-8")
+        req = request.Request(url, data=data, headers=headers, method="POST")
+        with request.urlopen(req, timeout=90) as response:
+            body = response.read().decode("utf-8")
+        parsed = json.loads(body)
+        if not isinstance(parsed, dict):
+            raise ValueError("model API response must be a JSON object")
+        return parsed
 
 
 class MockModelProvider:
