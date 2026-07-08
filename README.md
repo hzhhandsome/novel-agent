@@ -24,6 +24,18 @@ docker compose up --build
 
 后端容器启动时会先执行 `alembic upgrade head`，再启动 FastAPI。
 
+如果 Docker Hub 暂时无法拉取 Python/Node 基础镜像，可以先使用本地开发脚本。它仍然会用 Docker 启动 PostgreSQL 中间件：
+
+```powershell
+.\scripts\start-dev.ps1
+```
+
+停止本地前后端开发服务：
+
+```powershell
+.\scripts\stop-dev.ps1
+```
+
 ## Docker 验证
 
 后端测试：
