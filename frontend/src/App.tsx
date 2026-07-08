@@ -1,10 +1,11 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
   acceptChapter,
   addInspiration,
   createProject,
   generateChapter,
   getProject,
+  listProjects,
   rejectChapter,
   retryTask,
   updateChapter,
@@ -36,6 +37,23 @@ export default function App() {
     setEditorContent(chapter.content ?? "");
   }
 
+  function loadProject(next: Project) {
+    setProject(next);
+    const first = next.chapters[0] ?? null;
+    setSelectedChapterId(first?.id ?? null);
+    setEditorContent(first?.content ?? "");
+  }
+
+  useEffect(() => {
+    void runBusy(async () => {
+      const projects = await listProjects();
+      const latest = projects[0] ?? null;
+      if (latest) {
+        loadProject(latest);
+      }
+    });
+  }, []);
+
   async function refreshProject(projectId = project?.id) {
     if (!projectId) return;
     const next = await getProject(projectId);
@@ -62,10 +80,7 @@ export default function App() {
   function handleCreateProject() {
     void runBusy(async () => {
       const created = await createProject({ idea });
-      setProject(created);
-      const first = created.chapters[0] ?? null;
-      setSelectedChapterId(first?.id ?? null);
-      setEditorContent(first?.content ?? "");
+      loadProject(created);
     });
   }
 

@@ -19,6 +19,10 @@ export function createProject(payload: { idea: string; genre?: string; style?: s
   });
 }
 
+export function listProjects(): Promise<Project[]> {
+  return request<Project[]>("/api/projects");
+}
+
 export function getProject(projectId: number): Promise<Project> {
   return request<Project>(`/api/projects/${projectId}`);
 }
