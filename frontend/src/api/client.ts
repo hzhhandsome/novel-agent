@@ -38,6 +38,45 @@ export function generateChapter(chapterId: number): Promise<GenerationTask> {
   return request<GenerationTask>(`/api/chapters/${chapterId}/generate`, { method: "POST" });
 }
 
+export async function streamGenerateChapter(
+  chapterId: number,
+  onTask: (task: GenerationTask) => void,
+): Promise<GenerationTask | null> {
+  const response = await fetch(`/api/chapters/${chapterId}/generate/stream`, { method: "POST" });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("浏览器不支持流式响应");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let latest: GenerationTask | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+
+    for (const chunk of chunks) {
+      const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+      if (!dataLine) continue;
+      const payload = JSON.parse(dataLine.slice(6));
+      if (payload.id) {
+        latest = payload as GenerationTask;
+        onTask(latest);
+      }
+    }
+  }
+
+  return latest;
+}
+
 export function acceptChapter(chapterId: number): Promise<Chapter> {
   return request<Chapter>(`/api/chapters/${chapterId}/accept`, { method: "POST" });
 }

@@ -1,13 +1,25 @@
-# Project Rules
+# 项目协作规则
 
-## Communication and Git
+## 沟通与 Git
 
-- Commit messages must be written in Chinese.
-- Push-related summaries and status reports must be written in Chinese.
+- 提交信息必须使用中文。
+- 推送相关的总结和状态说明必须使用中文。
+- 只有代码改动才默认提交和推送。
+- 纯文档修改默认不提交、不推送，除非用户明确要求。
 
-## Development Workflow
+## 开发流程
 
-- Before developing any module or feature, create an implementation plan document first.
-- Use `superpowers:writing-plans` for this workflow when available.
-- Plans should be saved under `docs/superpowers/plans/` following the superpowers plan format.
-- Development should follow the approved plan task by task.
+- 开发任何功能模块前，必须使用 `superpowers:writing-plans` 建立独立实施计划，并按该计划执行。
+- 完成功能后，优先在对应实施计划中补充实施结果；不强制为每个小功能单独创建完成文档。
+
+- 对稳定且容易出错的大模块，可以在 `docs/modules/` 下维护模块说明文档；后续修改相关模块前必须先阅读对应模块文档。
+- 后续功能计划如果涉及已有模块，写计划前必须先阅读对应 `docs/modules/` 文档，并在计划的文件清单或上下文部分注明已阅读的模块文档。
+- 如果功能会改变某个模块的职责、接口、状态机、数据流、配置项或关键约束，完成实现后必须同步更新对应模块文档。
+- 模块文档只记录稳定事实和协作边界，不记录每次小改动流水账。
+
+- 新增稳定模块时，优先创建 `docs/modules/<module-name>.md`，并在文档中写清：模块职责、入口文件、核心流程、数据/状态、扩展点、测试方式、后续修改注意事项。
+
+## 本项目规则
+
+- 第一版目标是简单可用的自动化小说生成闭环
+- 章节生成流程必须使用 LangGraph 节点化编排，不能写成固定大函数。

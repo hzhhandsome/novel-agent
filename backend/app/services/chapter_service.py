@@ -1,9 +1,11 @@
 from __future__ import annotations
 
+from collections.abc import Iterator
+
 from sqlalchemy import select
 from sqlalchemy.orm import Session, selectinload
 
-from app.agent.chapter_graph import build_chapter_generation_graph, persist_generation_result
+from app.agent.chapter_graph import build_chapter_generation_graph
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus
 from app.services.model_provider import ModelProvider
@@ -23,6 +25,38 @@ def generate_chapter_candidate(
     session.commit()
     session.refresh(task)
     return _run_generation_task(session, task.id, fail_at=fail_at, provider=provider)
+
+
+def stream_chapter_generation_candidate(
+    session: Session,
+    chapter_id: int,
+    provider: ModelProvider | None = None,
+) -> Iterator[GenerationTask]:
+    chapter = session.get_one(Chapter, chapter_id)
+    chapter.status = ChapterStatus.generating
+    task = GenerationTask(project_id=chapter.project_id, chapter_id=chapter.id, kind="chapter_generation")
+    session.add(task)
+    session.commit()
+    session.refresh(task)
+    yield get_generation_task(session, task.id)
+
+    graph = build_chapter_generation_graph(session, provider or get_model_provider())
+    initial_state = {
+        "task_id": task.id,
+        "project_id": task.project_id,
+        "chapter_id": task.chapter_id,
+        "fail_at": None,
+    }
+
+    try:
+        for _chunk in graph.stream(initial_state):
+            yield get_generation_task(session, task.id)
+    except Exception:
+        session.rollback()
+        yield get_generation_task(session, task.id)
+        return
+
+    yield get_generation_task(session, task.id)
 
 
 def retry_generation_task(
@@ -101,8 +135,8 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
     for step in task.steps:
         if step.name == "build_prompt_package" and step.output_snapshot:
             prompt_package = step.output_snapshot.get("prompt_package")
-        if step.name == "review_prose" and step.output_snapshot:
-            review_result = {"findings": step.output_snapshot.get("review_findings", [])}
+        if step.name == "audit_prose" and step.output_snapshot:
+            review_result = step.output_snapshot.get("audit_result")
 
     chapter = session.get_one(Chapter, chapter_id)
     session.add(
@@ -132,10 +166,9 @@ def _run_generation_task(
     }
 
     try:
-        final_state = graph.invoke(initial_state)
+        graph.invoke(initial_state)
     except Exception:
         session.rollback()
         return get_generation_task(session, task.id)
 
-    persist_generation_result(session, final_state)
     return get_generation_task(session, task.id)

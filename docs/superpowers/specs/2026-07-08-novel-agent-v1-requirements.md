@@ -1,460 +1,414 @@
-# Novel Agent V1 Requirements Analysis
+# 小说 Agent 第一版需求分析
 
-## 1. Product Positioning
+## 1. 第一版目标
 
-Novel Agent V1 is an automation-first long-form fiction writing system. Its goal is not only to provide writing assistance, but to let the agent automatically plan, generate, compress, update memory, manage foreshadowing, and review drafts while allowing the author to intervene at any time.
+第一版先做一个简单可用的自动化小说生成工具。
 
-The author can provide inspiration, direction, character changes, plot turns, style preferences, or manual prose at any point. The agent must incorporate these inputs into the project state and continue automation from the updated direction.
+核心目标：
 
-V1 should be designed as a web application first, with a path to desktop packaging later through Tauri. The agent engine should remain independent from the UI so it can be reused by the desktop shell.
+- 作者输入一个小说想法。
+- Agent 自动生成小说基础设定、角色、主线和章节。
+- 作者可以随时加入灵感、走向、人设或限制。
+- Agent 根据新输入继续自动生成。
+- 系统保存章节、设定、角色卡、摘要、伏笔和生成记录。
 
-Recommended stack:
+第一版不追求复杂编辑器、出版排版、多 Agent 分工、插件系统或高级检索。重点是先跑通“自动生成 -> 作者介入 -> Agent 继续生成”的闭环。
 
-- Frontend: React + Vite + TypeScript
-- Desktop shell later: Tauri
-- Agent backend: Python + FastAPI + LangGraph
-- Local persistence: SQLite plus local project files
-- Model access: provider adapter layer for cloud and local models
+## 2. 技术路线
 
-## 2. Core Product Principle
+第一版先做 Web 应用，后续再用 Tauri 打包桌面端。
 
-The system should automate fiction production, but not silently corrupt the novel canon.
+推荐技术栈：
 
-Automation should be the default for routine generation, summarization, draft expansion, chapter planning, style application, and non-critical memory updates. Human confirmation is required for changes that alter canon, locked constraints, major character motivation, main plot direction, or important foreshadowing recovery.
+- 前端：React + Vite + TypeScript
+- 后端：Python + FastAPI
+- Agent 流程：LangGraph
+- 数据库：Docker Compose 中的 PostgreSQL
+- 后续桌面端：Tauri
 
-The default operating mode for V1 is "key-change confirmation":
+第一版开发期数据不重要，可以先不配置 PostgreSQL volume。后续需要保留项目数据或正式使用时，再加入持久化配置。
 
-- Routine work runs automatically.
-- Major canon changes pause and ask the author to confirm.
-- The author can switch to full automation, per-chapter confirmation, or manual assistance mode.
+## 3. 主界面
 
-## 3. Primary User Experience
+第一版主界面采用四区布局。
 
-The first screen is a writing cockpit, not a landing page.
+### 3.1 左侧章节栏
 
-### 3.1 Layout
+展示小说章节结构：
 
-The UI has four main regions:
+- 章节列表。
+- 当前章节状态：未生成、生成中、已生成、已采纳。
+- 新建章节。
+- 重新生成章节。
 
-- Left sidebar: novel structure, volumes, chapters, fragments, and generation status.
-- Center editor: current chapter content and author takeover area.
-- Right sliding module panel: configurable modules such as world constraints, character cards, style, positioning, foreshadowing, main plot, and inspiration input.
-- Bottom agent workspace: shows the agent's meaningful creative work, not generic system logs.
+第一版不做复杂卷管理和片段管理，先只支持简单章节列表。
 
-### 3.2 Left Sidebar
+### 3.2 中间正文区
 
-The left sidebar supports:
+展示和编辑当前章节正文：
 
-- Volume and chapter tree.
-- Draft, generated, reviewed, accepted, and locked status indicators.
-- Chapter creation, regeneration, and ordering.
-- Unassigned fragments or inspiration notes.
-- Per-chapter automation status.
+- 查看当前章节正文。
+- 作者可以直接修改正文。
+- 展示 Agent 生成结果。
+- 支持采纳、拒绝、重生成当前章节。
 
-### 3.3 Center Editor
+第一版只做整章生成和整章重生成，不做复杂编辑能力。
 
-The editor supports:
+### 3.3 右侧模块栏
 
-- Reading and editing chapter prose.
-- Manual author writing.
-- Selecting text for local rewrite, expansion, compression, continuation, or review.
-- Showing generated candidates before insertion.
-- Accepting, rejecting, editing, or regenerating output.
-- Inserting author inspiration into the current scene or future plan.
+右侧展示小说生成所需的关键配置和状态：
 
-### 3.4 Right Module Panel
+- 小说定位：题材、读者、风格、篇幅。
+- 世界观设定。
+- 主线方向。
+- 角色卡。
+- 作者灵感输入。
+- 伏笔记录。
 
-The right panel is modular and can become long, so modules must be collapsible, reorderable, and removable.
+模块需要可以折叠。第一版不要求拖拽排序和复杂自定义模块。
 
-Initial modules:
+### 3.4 底部 Agent 创作后台
 
-- Novel positioning: genre, audience, length, pacing, core appeal, forbidden directions.
-- Style configuration: prose style, tone, narrative perspective, forbidden expressions, pacing.
-- World constraints: hard rules, soft rules, location rules, magic or technology constraints, social structure.
-- Main plot: current arc, long-term direction, current chapter goal, forbidden spoilers.
-- Character cards: character list and period cards.
-- Inspiration input: author can inject plot turns, character changes, scenes, lines, or constraints.
-- Foreshadowing and promise ledger: active clues, reader promises, emotional debts, relationship debts.
-- Automation settings: full automation, per-chapter confirmation, key-change confirmation, manual assistance.
+底部只展示 Agent 真正有用的创作工作，不展示无意义日志。
 
-## 4. Automation Workflow
+第一版展示：
 
-V1 should support an automatic loop from project setup to chapter generation.
+- 当前 Agent 正在做什么。
+- 本章生成提示包。
+- 章节摘要。
+- 角色卡更新建议。
+- 伏笔更新建议。
+- 审核发现。
+- 中断或失败状态。
 
-### 4.1 Project Initialization
+这些中间结果可以让作者确认、编辑或拒绝。
 
-The agent can generate or accept manual input for:
+## 4. 自动生成流程
 
-- Novel title and working title.
-- Genre and subgenre.
-- Reader positioning.
-- Target length and chapter size.
-- Core appeal.
-- Main conflict.
-- World premise.
-- Protagonist and major characters.
-- Long-term main plot.
-- Style defaults.
+### 4.1 创建小说
 
-The author can lock any generated item. Locked items cannot be overwritten by later automation without explicit confirmation.
+作者输入：
 
-### 4.2 Chapter Generation Loop
+- 小说想法。
+- 题材或风格偏好。
+- 可选的主角、人设、世界观或主线要求。
 
-For each chapter, the agent performs:
+Agent 自动生成：
 
-1. Build chapter target: purpose, emotional beat, plot advancement, viewpoint, end hook.
-2. Build generation prompt package: current chapter target, relevant character period cards, world constraints, style, prior summaries, active foreshadowing, forbidden spoilers.
-3. Generate chapter outline or scene beats.
-4. Generate prose.
-5. Review prose.
-6. Propose revisions.
-7. Accept, edit, or regenerate.
-8. Update memory after acceptance.
+- 小说定位。
+- 世界观初稿。
+- 主线初稿。
+- 主要角色卡。
+- 前几章章节规划。
 
-The author can interrupt at any step with new inspiration or manual writing. The agent then recalculates affected plot, character, memory, and foreshadowing state.
+作者可以编辑这些内容，也可以让 Agent 重生成。
 
-### 4.3 Automation Modes
+### 4.2 生成章节
 
-V1 supports four modes:
+每次生成章节时，Agent 按以下流程执行：
 
-- Full automation: the agent keeps generating chapters and pauses only on severe conflicts.
-- Per-chapter confirmation: each chapter requires author confirmation before continuing.
-- Key-change confirmation: routine work is automatic, but canon-impacting changes require confirmation.
-- Assistance mode: the author writes manually and uses the agent for local generation, review, and organization.
+1. 读取小说定位、世界观、主线、角色卡、伏笔和前文摘要。
+2. 生成本章目标。
+3. 生成本章提示包。
+4. 生成章节正文。
+5. 审核生成结果。
+6. 给出需要更新的摘要、角色卡和伏笔建议。
+7. 作者采纳或拒绝。
 
-The default is key-change confirmation.
+采纳后，章节进入正式内容，并更新相关记忆。
 
-## 5. Agent Creative Workspace
+生成流程必须使用 LangGraph 节点化编排，不能写成固定大函数。具体节点设计、状态字段、重试策略放到后续实施计划中展开。
 
-The bottom panel should show where the agent is doing useful creative work. It should avoid low-value logs such as raw API status or generic progress messages.
+### 4.3 作者介入
 
-Required bottom-panel sections:
+作者可以随时输入新的灵感，例如：
 
-- Chapter compression: shows when context is near limit and what is being compressed.
-- Memory promotion: shows which events are being promoted to character memory, world facts, plot state, or foreshadowing.
-- Character prompt generation: shows the role-specific prompt used for this chapter or scene.
-- Generation prompt package: shows the actual creative constraints used for the next generation.
-- Foreshadowing ledger updates: shows clues created, advanced, delayed, recovered, or blocked.
-- Review findings: shows character consistency, world conflict, pacing, spoiler leakage, repetition, and plot drift.
-- Canon change gates: shows what requires author approval before entering official memory.
+- 改变剧情方向。
+- 增加角色设定。
+- 修改主线。
+- 添加某个桥段。
+- 指定禁止出现的内容。
 
-The bottom panel must expose intermediate artifacts that the author can accept, edit, reject, or regenerate.
+Agent 需要把这些输入加入后续生成上下文，并在必要时更新主线、角色卡或伏笔记录。
 
-## 6. Long-Form Memory System
+第一版只要求处理“后续生成受影响”，不要求自动重写全部历史章节。
 
-Long-form writing requires memory beyond the current context window.
+## 5. 中断恢复
 
-### 6.1 Chapter Compression
+第一版需要实现简化的节点级中断恢复。
 
-When context approaches a configured threshold, the agent automatically compresses earlier chapters.
+目标：
 
-Compression output includes:
+- 浏览器断开时，不应直接导致生成任务失败。
+- 后端服务异常或模型调用失败时，用户能看到生成停在哪一步。
+- 用户能看到失败原因。
+- 用户可以从失败或中断的位置重试。
 
-- Plot facts.
-- Character changes.
-- Relationship changes.
-- World facts introduced.
-- Active foreshadowing.
-- Reader promises.
-- Unresolved conflicts.
-- Forbidden contradictions.
+第一版要求：
 
-The author can inspect, edit, accept, or regenerate compression output before it enters long-term memory.
+- 生成章节时记录生成任务。
+- 生成流程中的关键步骤要记录状态。
+- 失败时记录错误类型和错误说明。
+- 服务重启后能识别未完成任务，并提示用户重试。
+- 中断恢复依赖已保存的任务和步骤状态，不依赖内存。
 
-### 6.2 Memory Promotion
+第一版不做：
 
-Generated or manually written content can be promoted into:
+- token 级断点续写。
+- Redis 队列。
+- Celery worker。
+- 多 worker 调度。
+- 复杂自动重试策略。
 
-- Chapter summary.
-- Character period memory.
-- World fact.
-- Main plot state.
-- Foreshadowing ledger.
-- Style note.
-- Forbidden direction.
+具体表结构、字段、恢复算法和 LangGraph 节点实现细节，放到后续实施计划中设计。
 
-Promotion should not be fully silent for important facts. V1 should automatically suggest promotions and require confirmation for canon-impacting changes.
+## 6. 核心数据
 
-### 6.3 Draft and Canon Isolation
+第一版需要保存：
 
-The system must distinguish:
+- 项目。
+- 章节。
+- 小说定位。
+- 世界观设定。
+- 主线设定。
+- 角色卡。
+- 章节摘要。
+- 作者灵感。
+- 伏笔记录。
+- 生成记录。
+- 生成任务状态。
+- 审核发现。
 
-- Accepted canon prose.
-- Author plan.
-- Candidate draft.
-- Rejected draft.
-- Generated suggestion.
-- Locked rule.
-- Hidden spoiler.
+每次生成需要保存：
 
-Only accepted canon and confirmed memory should influence future generation by default. Candidate and rejected material must not pollute memory.
+- 使用的输入。
+- 生成提示包。
+- 生成结果。
+- 审核结果。
+- 作者是否采纳。
+- 生成是否失败或中断。
 
-## 7. Character Period Cards
+## 7. 角色卡
 
-Characters are not represented by a single static card. Each important character has period cards.
+第一版角色卡先做简单版本。
 
-Each period card includes:
+每个角色包含：
 
-- Period name.
-- Active chapters or arc range.
-- Public identity.
-- Private motivation.
-- Current belief.
-- Emotional state.
-- Relationships.
-- Secrets.
-- Key memories.
-- Speaking style.
-- Behavioral constraints.
-- Forbidden actions.
-- Current chapter prompt.
+- 名字。
+- 身份。
+- 性格。
+- 当前目标。
+- 关键记忆。
+- 和主角或其他角色的关系。
+- 写作注意事项。
 
-The agent can generate new period cards when plot progression changes a character. Core motivation changes require author confirmation.
+Agent 可以根据剧情推进提出角色卡更新建议。作者确认后，更新才进入正式角色卡。
 
-Example flow:
+第一版暂不做复杂的多时期角色卡界面，但数据设计需要预留后续扩展空间。
 
-1. Character appears in a new arc.
-2. Agent detects changed motivation or memory.
-3. Agent proposes a new period card.
-4. Author accepts, edits, or rejects.
-5. Accepted card becomes available for later generation.
+## 8. 章节摘要与压缩
 
-## 8. Foreshadowing and Promise Ledger
+第一版需要做基础章节摘要。
 
-The system should track more than traditional foreshadowing.
+每章采纳后，Agent 自动生成：
 
-Ledger item types:
+- 本章发生了什么。
+- 角色有什么变化。
+- 新增了什么设定。
+- 新增或推进了什么伏笔。
 
-- Plot clue.
-- Mystery.
-- Reader promise.
-- Emotional debt.
-- Relationship debt.
-- Power or ability setup.
-- World rule setup.
-- Character secret.
+这些摘要用于后续章节生成。
 
-Each ledger item includes:
+第一版不做复杂 token 预算管理，只做“章节正文 + 已采纳摘要 + 关键设定”的简单上下文组织。
 
-- Source chapter or scene.
-- Current status: planted, advanced, delayed, ready to recover, recovered, abandoned.
-- Allowed visibility.
-- Spoiler risk.
-- Planned recovery range.
-- Related characters.
-- Related world facts.
-- Notes for generation.
+## 9. 伏笔记录
 
-The agent should automatically suggest new ledger items when generated or accepted text creates a reader expectation. The agent should warn when generation risks revealing a clue too early or forgetting a long-running promise.
+第一版做简单伏笔记录。
 
-## 9. Review System
+每条伏笔包含：
 
-The review system runs before generated prose becomes accepted chapter content.
+- 伏笔内容。
+- 来源章节。
+- 当前状态：已埋下、已推进、已回收。
+- 备注。
 
-Review dimensions:
+Agent 在生成或审核后，可以建议新增或更新伏笔。作者确认后才保存。
 
-- Character consistency.
-- Motivation plausibility.
-- World constraint conflict.
-- Main plot alignment.
-- Foreshadowing leakage.
-- Foreshadowing neglect.
-- Pacing and chapter hook.
-- Repetition.
-- Style drift.
-- Continuity conflict.
+## 10. 审核
 
-The review system should return actionable findings, not generic scores.
+第一版审核只做基础检查：
 
-Each finding includes:
-
-- Problem type.
-- Location or affected passage.
-- Why it matters.
-- Suggested fix.
-- Whether it blocks automatic acceptance.
-
-V1 should not automatically rewrite accepted prose without user approval.
-
-## 10. Author Intervention
+- 是否偏离本章目标。
+- 是否违背主要人设。
+- 是否冲突世界观设定。
+- 是否提前泄露伏笔。
+- 是否和前文摘要矛盾。
 
-The author can intervene at any time.
+审核结果展示为问题列表和修改建议。第一版不要求 Agent 自动修正文稿。
 
-Supported intervention types:
+## 11. 自动化模式
 
-- Add inspiration.
-- Change plot direction.
-- Lock or unlock setting.
-- Add or edit character card.
-- Add hidden spoiler.
-- Rewrite selected text.
-- Manually write a scene.
-- Reject generated direction.
-- Force regeneration.
-- Change automation mode.
+第一版先做一个默认模式：
 
-When an intervention affects future generation, the agent should recalculate:
+- 自动生成单章：生成一章后等待作者采纳。
 
-- Main plot direction.
-- Current and future chapter targets.
-- Character cards.
-- Foreshadowing ledger.
-- World constraints.
-- Prompt package.
+连续生成多章草稿先作为后续能力预留，不进入第一版必须范围。
 
-The system should show the impact scope before applying major changes.
+## 12. 第一版必须实现
 
-## 11. Data Objects
+- 创建小说项目。
+- 输入小说想法。
+- 自动生成小说定位、世界观、主线和角色卡初稿。
+- 章节列表。
+- 章节正文展示和编辑。
+- 自动生成单章。
+- 作者灵感输入。
+- 简单角色卡。
+- 章节摘要。
+- 简单伏笔记录。
+- 简单审核结果。
+- 生成记录。
+- 节点级中断恢复。
+- PostgreSQL 保存。
 
-V1 should persist these core objects:
+## 13. 第一版不做
 
-- Project.
-- Volume.
-- Chapter.
-- Scene or fragment.
-- Novel positioning.
-- Style profile.
-- World rule.
-- Character.
-- Character period card.
-- Chapter summary.
-- Memory item.
-- Foreshadowing or promise item.
-- Inspiration note.
-- Generation run.
-- Review finding.
-- Automation setting.
-- Lock or confirmation gate.
+- 复杂富文本编辑器。
+- 复杂局部编辑能力。
+- 多人协作。
+- 云同步。
+- 插件系统。
+- 出版级排版。
+- 模板市场。
+- 高级向量检索。
+- 复杂多 Agent 分工。
+- 完整桌面端打包。
+- 完整多时期角色卡管理界面。
+- token 级断点续写。
+- Redis/Celery 复杂任务队列。
 
-Generation runs should record:
+## 14. 后续改动需要预留的点
 
-- Task type.
-- Model and parameters.
-- Input context references.
-- Prompt package.
-- Output.
-- Review result.
-- User decision.
-- Timestamp.
+第一版虽然要简单，但以下位置需要避免写死，方便后续改：
 
-This history is required for rollback and debugging generation quality.
+- 生成流程：必须节点化，方便加步骤、删步骤或调整顺序。
+- 数据库结构：使用迁移工具管理 schema，避免后续手动改表混乱。
+- 模型接入：通过模型适配层调用，避免业务代码直接绑定某个模型厂商。
+- 右侧模块：模块数据结构要能扩展，后续可以增加新模块。
+- 任务状态：生成任务和步骤必须落库，避免中断后无法判断进度。
+- 正文和摘要：正文、摘要、角色卡、伏笔要分开保存，避免后续检索和更新困难。
 
-## 12. MVP Scope
+## 15. 后续需求池
 
-V1 must include:
+后续开发从本节按进度选择 P0 需求拆分为独立实施计划。未进入当期计划前，不要求第一版实现。
 
-- Project creation.
-- Four-region writing cockpit.
-- Chapter tree and editor.
-- Right-side configurable modules.
-- Automatic project setup generation.
-- Automatic chapter generation loop.
-- Author inspiration injection.
-- Character period cards.
-- Chapter compression.
-- Memory promotion.
-- Prompt package preview.
-- Foreshadowing and promise ledger.
-- Review findings.
-- Automation mode selection.
-- Local persistence.
-- Generation history and rollback.
+### 15.1 P0 候选：LLM 平滑切换
 
-V1 can defer:
+目标：
 
-- Multi-user collaboration.
-- Cloud sync.
-- Marketplace templates.
-- Full docx export polish.
-- Rich typography publishing layout.
-- Advanced vector database tuning.
-- Multi-agent UI with separate named agents.
-- Mobile layout.
-- Plugin system.
+- 系统支持在运行时切换当前使用的 LLM。
+- 切换后，新创建的生成任务使用新模型。
+- 已经开始执行的生成任务继续使用任务创建时记录的 provider、base_url、model 和参数，避免生成过程中模型被切换导致结果不可复现。
+- 每条生成记录需要保存实际使用的模型配置摘要，方便后续追踪质量、成本和失败原因。
 
-## 13. Technical Architecture
+第一阶段建议先做全局切换：
 
-The architecture should separate UI, API, agent workflow, and persistence.
+- 后台或配置界面维护一个“当前默认模型”。
+- 项目创建、章节生成、审核、摘要等新任务默认使用当前默认模型。
+- 暂不做节点级模型路由。
 
-### 13.1 Frontend
+后续可扩展：
 
-React + TypeScript provides the cockpit UI:
+- 项目级模型配置。
+- 节点级模型配置，例如策划、写作、审核、摘要分别选择不同模型。
+- 不同模型的温度、最大 token、超时和重试策略。
 
-- Chapter tree.
-- Editor.
-- Right module panel.
-- Bottom agent workspace.
-- Generation controls.
-- Review and confirmation dialogs.
+### 15.2 P0 候选：AI 生成期间输入锁定
 
-The frontend should treat the backend as the source of truth for project state.
+目标：
 
-### 13.2 Backend API
+- 用户只能在 AI 生成前或生成后输入内容。
+- AI 正在生成、审核、保存或重试时，正文、灵感、设定等输入控件需要锁定。
+- 锁定期间界面必须展示当前任务状态和节点进度，避免用户误以为系统卡死。
 
-FastAPI exposes:
+建议状态：
 
-- Project CRUD.
-- Chapter CRUD.
-- Module state.
-- Generation task start and status.
-- Review result retrieval.
-- Confirmation gates.
-- History and rollback.
+- `idle`：可输入。
+- `editing`：可输入。
+- `generating`：锁定输入。
+- `reviewing`：锁定输入。
+- `saving`：锁定输入。
+- `generated`：可采纳、拒绝、修改或追加灵感。
+- `failed`：可查看错误并重试，也可在重试前修改输入。
 
-Long-running generation should be represented as tasks with durable state, not one blocking request.
+原因：
 
-### 13.3 Agent Workflow
+- 避免用户在生成中修改上下文，导致提示包、生成结果和保存状态不一致。
+- 便于后续实现中断恢复和生成记录复现。
 
-LangGraph models the automation workflow:
+### 15.3 P0 候选：AI 评判用户输入是否合理
 
-- Project setup graph.
-- Chapter generation graph.
-- Compression graph.
-- Memory promotion graph.
-- Review graph.
-- Intervention recalculation graph.
+目标：
 
-Each node should produce structured intermediate artifacts that can be shown in the bottom agent workspace.
+- 用户提交小说想法、作者灵感、正文改动或关键设定改动后，AI 可以先评判输入是否合理。
+- 评判结果需要展示给用户，用户确认后再写入正式上下文或触发后续生成。
 
-### 13.4 Persistence
+建议评判结果：
 
-SQLite stores structured project state. Large generated text can be stored in SQLite or project-local files, with references in the database.
+- `accepted`：可以直接进入上下文。
+- `warning`：基本可用，但提示可能带来的人设、世界观、节奏或伏笔风险。
+- `blocked`：不建议进入上下文，需要用户修改后再提交。
 
-The persistence layer must protect draft/canon separation and support rollback.
+第一阶段建议评判范围：
 
-## 14. Open Design Decisions
+- 是否和当前世界观冲突。
+- 是否破坏主要角色动机。
+- 是否和前文摘要矛盾。
+- 是否提前泄露伏笔。
+- 是否偏离项目定位或章节目标。
+- 是否过于模糊，无法指导后续生成。
 
-The following decisions should be resolved before implementation planning:
+第一阶段不要求 AI 自动改写用户输入，只提供原因和修改建议。
 
-- Editor engine: plain textarea first, TipTap, or Monaco-style editor.
-- Local model support in V1 or cloud-provider-only first.
-- Whether full automation can generate multiple chapters in one run in V1.
-- Exact confirmation gates for memory promotion.
-- Storage format for project export.
-- Whether semantic retrieval is needed in V1 or structured memory is enough.
+### 15.4 P0 候选：已采纳章节润色与重写限制
 
-Recommended defaults:
+目标：
 
-- Use a pragmatic rich text or markdown editor, not a complex publishing editor.
-- Cloud-provider adapter first, local model adapter interface reserved.
-- Allow multi-chapter automation only after single-chapter loop is stable.
-- Require confirmation for canon-changing memory promotion.
-- Use SQLite plus markdown export.
-- Start with structured retrieval; add vector retrieval after memory objects stabilize.
+- 已采纳章节第一阶段只支持“润色”，不支持直接剧情重写。
+- 润色只允许改进表达、节奏、语气和可读性，不允许改变剧情事件、人物选择、设定事实、伏笔状态或章节结局。
+- 润色结果必须先作为候选展示，经过审核确认“语义未改变”后，用户才能采纳替换正式正文。
+- 已采纳章节如果已经影响后续正式章节，默认不允许重写剧情。
+- 如后续需要支持剧情重写，必须先提供“删除或回滚该章之后所有正式章节”的能力，再从该章重新生成后续内容。
 
-## 15. Success Criteria
+原因：
 
-V1 is successful if a user can:
+- 已采纳章节已经进入正式上下文，会影响后续章节摘要、角色状态、伏笔状态、章节线路和用户灵感。
+- 直接重写历史章节会导致后续已生成内容和新正文之间出现因果、人设、伏笔或设定冲突。
+- 即使重写时加载所有后续摘要，也只能让 AI 尝试圆回矛盾，不能保证上下文链条可靠。
 
-- Create a new novel from a short idea.
-- Let the agent generate positioning, world, main plot, and characters.
-- Run automatic chapter generation.
-- Inject a new inspiration mid-process and see the agent recalculate affected state.
-- Generate or update character period cards.
-- Continue writing after context grows by using chapter compression.
-- Track foreshadowing and reader promises.
-- Review generated prose before accepting it.
-- Recover from bad generations through history and rollback.
-- Maintain clear separation between canon, plans, drafts, rejected outputs, and locked rules.
+建议交互：
 
-The core promise is: the agent can continue a long novel automatically while preserving the author's ability to direct, correct, and protect the story's canon.
+- 未采纳章节：允许重新生成。
+- 已采纳章节：显示“润色”按钮。
+- 已采纳且后面已有正式章节：禁用“重写”按钮，并提示“需先回滚后续章节”。
+- 已采纳且是最后一章：仍不建议第一阶段直接重写，至少需要提示“重写会重建本章摘要、角色卡和伏笔状态”。
+
+后续可扩展：
+
+- P1：支持回滚某章之后的正式章节，再从该章重写。
+- P2：支持章节分支或版本管理，保留旧线路和新线路。
+
+## 16. 成功标准
+
+第一版成功标准：
+
+- 用户能从一个小说想法创建项目。
+- Agent 能生成基础设定、角色和章节规划。
+- Agent 能生成至少一章正文。
+- 用户能修改或采纳生成章节。
+- 用户能输入新灵感影响后续生成。
+- 系统能保存章节、角色卡、摘要、伏笔和生成记录。
+- 后续章节能参考前文摘要和关键设定继续生成。
+- 生成失败或服务重启后，用户能看到中断步骤和错误原因，并重试生成。
+
+第一版的目标是先做出可运行的自动化小说生成闭环，再逐步增强复杂记忆、角色时期卡、伏笔账本和桌面端体验。

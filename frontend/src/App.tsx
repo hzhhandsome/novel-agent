@@ -3,11 +3,11 @@ import {
   acceptChapter,
   addInspiration,
   createProject,
-  generateChapter,
   getProject,
   listProjects,
   rejectChapter,
   retryTask,
+  streamGenerateChapter,
   updateChapter,
 } from "./api/client";
 import { AgentWorkspace } from "./components/AgentWorkspace";
@@ -95,9 +95,10 @@ export default function App() {
   function handleGenerate() {
     if (!selectedChapter) return;
     void runBusy(async () => {
-      const generated = await generateChapter(selectedChapter.id);
-      setTask(generated);
-      await refreshProject(generated.project_id);
+      const generated = await streamGenerateChapter(selectedChapter.id, setTask);
+      if (generated) {
+        await refreshProject(generated.project_id);
+      }
     });
   }
 
@@ -164,7 +165,7 @@ export default function App() {
         onInspirationChange={setInspirationText}
         onAddInspiration={handleAddInspiration}
       />
-      <AgentWorkspace task={task} busy={busy} onRetry={handleRetry} />
+      <AgentWorkspace project={project} task={task} busy={busy} onRetry={handleRetry} />
     </div>
   );
 }

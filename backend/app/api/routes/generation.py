@@ -1,5 +1,8 @@
+import json
+
 from pydantic import BaseModel
 from fastapi import APIRouter, Depends
+from fastapi.responses import StreamingResponse
 from sqlalchemy.orm import Session
 
 from app.db.session import get_session
@@ -10,6 +13,7 @@ from app.services.chapter_service import (
     get_generation_task,
     list_interrupted_tasks,
     retry_generation_task,
+    stream_chapter_generation_candidate,
 )
 
 router = APIRouter(tags=["generation"])
@@ -27,6 +31,21 @@ def generate_chapter(
 ) -> dict:
     task = generate_chapter_candidate(session, chapter_id, fail_at=payload.fail_at if payload else None)
     return _task_to_dict(task)
+
+
+@router.post("/api/chapters/{chapter_id}/generate/stream")
+def generate_chapter_stream(
+    chapter_id: int,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    def events():
+        for task in stream_chapter_generation_candidate(session, chapter_id):
+            yield "event: task\n"
+            yield f"data: {json.dumps(_task_to_dict(task), ensure_ascii=False)}\n\n"
+        yield "event: done\n"
+        yield "data: {}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
 
 
 @router.get("/api/generation-tasks/interrupted")
@@ -62,6 +81,8 @@ def _task_to_dict(task: GenerationTask) -> dict:
                 "task_id": step.task_id,
                 "name": step.name,
                 "status": _value(step.status),
+                "input_snapshot": step.input_snapshot,
+                "output_snapshot": step.output_snapshot,
                 "error_message": step.error_message,
             }
             for step in task.steps

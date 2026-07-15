@@ -53,6 +53,8 @@ export interface GenerationStep {
   task_id: number;
   name: string;
   status: string;
+  input_snapshot: Record<string, unknown> | null;
+  output_snapshot: Record<string, unknown> | null;
   error_message: string | null;
 }
 

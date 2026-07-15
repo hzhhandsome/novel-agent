@@ -69,6 +69,15 @@ class ModelProvider(Protocol):
     def summarize_chapter(self, content: str) -> str:
         raise NotImplementedError
 
+    def judge_foreshadowing(self, content: str, context: str, existing_items: list[str]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def judge_character_period(self, content: str, context: str, characters: list[str]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def propose_future_plan_updates(self, content: str, context: str, chapters: list[str]) -> dict[str, Any]:
+        raise NotImplementedError
+
 
 Transport = Callable[[str, dict[str, str], dict[str, Any]], dict[str, Any]]
 
@@ -165,6 +174,35 @@ class DeepSeekAnthropicProvider:
             user=f"为下面章节写一句可供后续章节引用的摘要。JSON 字段必须包含 summary。\n章节正文：{content}",
         )
         return str(payload["summary"])
+
+    def judge_foreshadowing(self, content: str, context: str, existing_items: list[str]) -> dict[str, Any]:
+        return self._call_json(
+            system="你是小说伏笔管理助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "判断章节中的伏笔变化。JSON 字段必须包含 new, advanced, resolved, leaked, notes。"
+                f"\n上下文：{context}\n已有伏笔：{existing_items}\n章节正文：{content}"
+            ),
+        )
+
+    def judge_character_period(self, content: str, context: str, characters: list[str]) -> dict[str, Any]:
+        return self._call_json(
+            system="你是小说角色状态管理助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "判断角色时期卡变化。JSON 字段必须包含 updates, new_period_cards, "
+                "relationship_changes, memory_changes, stage_changed。"
+                f"\n上下文：{context}\n角色：{characters}\n章节正文：{content}"
+            ),
+        )
+
+    def propose_future_plan_updates(self, content: str, context: str, chapters: list[str]) -> dict[str, Any]:
+        return self._call_json(
+            system="你是小说章节规划助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "根据本章实际正文判断后续章节标题和线路是否需要调整。"
+                "JSON 字段必须包含 suggestions 数组和 notes。"
+                f"\n上下文：{context}\n后续章节：{chapters}\n章节正文：{content}"
+            ),
+        )
 
     def _call_json(self, system: str, user: str) -> dict[str, Any]:
         response = self.transport(
@@ -281,3 +319,32 @@ class MockModelProvider:
     def summarize_chapter(self, content: str) -> str:
         first_line = content.strip().splitlines()[0] if content.strip() else "空章节"
         return f"{first_line}：本章完成关键事件推进，并留下后续生成可引用的摘要。"
+
+    def judge_foreshadowing(self, content: str, context: str, existing_items: list[str]) -> dict[str, Any]:
+        return {
+            "new": ["异常出现时留下一个尚未解释的细节。"],
+            "advanced": existing_items[:1] or ["初始异常细节被推进。"],
+            "resolved": [],
+            "leaked": [],
+            "notes": "伏笔未提前泄露，适合继续保留。",
+        }
+
+    def judge_character_period(self, content: str, context: str, characters: list[str]) -> dict[str, Any]:
+        return {
+            "updates": ["主角开始从旁观者转向行动者。"],
+            "new_period_cards": [],
+            "relationship_changes": [],
+            "memory_changes": ["主角确认异常会影响稳定生活。"],
+            "stage_changed": False,
+        }
+
+    def propose_future_plan_updates(self, content: str, context: str, chapters: list[str]) -> dict[str, Any]:
+        return {
+            "suggestions": [
+                {
+                    "chapter": chapters[1] if len(chapters) > 1 else "第 2 章",
+                    "change": "强化第一次付出代价的目标。",
+                }
+            ],
+            "notes": "本章已经完成初始异常确认，后续应承接代价验证。",
+        }

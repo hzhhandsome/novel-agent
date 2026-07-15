@@ -6,6 +6,8 @@ class TaskStepRead(BaseModel):
     task_id: int
     name: str
     status: str
+    input_snapshot: dict | None = None
+    output_snapshot: dict | None = None
     error_message: str | None = None
 
     model_config = ConfigDict(from_attributes=True)

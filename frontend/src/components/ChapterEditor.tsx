@@ -42,6 +42,27 @@ export function ChapterEditor({
         <ProjectCreator idea={idea} busy={busy} onIdeaChange={onIdeaChange} onCreate={onCreateProject} />
       ) : (
         <>
+          <div className="top-generation-toolbar" aria-label="生成控制">
+            <div className="auto-mode-control">
+              <span className="auto-switch" aria-hidden="true" />
+              <div>
+                <strong>全自动</strong>
+                <span>开启后自动生成、审核、更新上下文并进入下一章</span>
+              </div>
+            </div>
+            <div className="toolbar-actions">
+              <span className="status-pill">运行中</span>
+              <button type="button" className="primary-button" onClick={onGenerate} disabled={busy} title="暂停">
+                <span>暂停</span>
+              </button>
+              <button type="button" className="secondary-button" onClick={onGenerate} disabled={busy} title="重新生成">
+                <span>重新生成</span>
+              </button>
+              <button type="button" className="secondary-button" disabled={busy} title="生成记录">
+                <span>生成记录</span>
+              </button>
+            </div>
+          </div>
           <div className="editor-toolbar">
             <div>
               <h1>{chapter.title}</h1>
