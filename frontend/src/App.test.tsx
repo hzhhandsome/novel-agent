@@ -49,6 +49,17 @@ function makeProject() {
   };
 }
 
+function makeProjectWithoutGeneratedContent() {
+  const project = makeProject();
+  return {
+    ...project,
+    chapters: project.chapters.map((chapter) => ({
+      ...chapter,
+      generated_content: null,
+    })),
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -223,9 +234,20 @@ describe("App", () => {
       ],
     };
 
-    render(<AgentWorkspace project={makeProject()} task={task} busy={false} onRetry={() => undefined} />);
+    render(
+      <AgentWorkspace
+        project={makeProject()}
+        task={task}
+        busy={false}
+        collapsed={false}
+        onToggleCollapsed={() => undefined}
+        onRetry={() => undefined}
+      />,
+    );
 
-    expect(screen.getByRole("button", { name: /1.*加载上下文.*完成/ })).toBeInTheDocument();
+    const completedNode = screen.getByRole("button", { name: /1.*加载上下文.*完成/ });
+    expect(completedNode).toBeInTheDocument();
+    expect(completedNode).not.toHaveTextContent("完成");
     expect(screen.getAllByText(/真实定位/).length).toBeGreaterThanOrEqual(1);
 
     fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
@@ -238,6 +260,25 @@ describe("App", () => {
     expect(screen.getByText(/真实伏笔推进/)).toBeInTheDocument();
     expect(screen.getByText(/真实角色更新/)).toBeInTheDocument();
     expect(screen.getByText(/真实线路调整/)).toBeInTheDocument();
+  });
+
+  it("collapses and expands the backstage", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([makeProject()]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    render(<App />);
+
+    const workspace = await screen.findByRole("region", { name: "Agent 创作后台" });
+    expect(screen.getByRole("tab", { name: "流程节点" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起后台" }));
+
+    expect(workspace).toHaveClass("collapsed");
+    expect(screen.queryByRole("tab", { name: "流程节点" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开后台" })).toBeInTheDocument();
   });
 
   it("updates generation progress from the streaming endpoint", async () => {
@@ -262,6 +303,15 @@ describe("App", () => {
           output_snapshot: { context_package: { worldview: "流式世界观" } },
           error_message: null,
         },
+        {
+          id: 2,
+          task_id: 9,
+          name: "generate_prose",
+          status: "completed",
+          input_snapshot: {},
+          output_snapshot: { generated_content: "流式正文候选第一段。" },
+          error_message: null,
+        },
       ],
     };
     const completed = {
@@ -271,7 +321,7 @@ describe("App", () => {
       steps: [
         ...task.steps,
         {
-          id: 2,
+          id: 3,
           task_id: 9,
           name: "persist_candidate_result",
           status: "completed",
@@ -285,7 +335,7 @@ describe("App", () => {
     vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
       const url = String(input);
       if (url === "/api/projects") {
-        return Promise.resolve(new Response(JSON.stringify([makeProject()]), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify([makeProjectWithoutGeneratedContent()]), { status: 200 }));
       }
       if (url === "/api/chapters/100/generate/stream") {
         const body = new ReadableStream({
@@ -299,7 +349,7 @@ describe("App", () => {
         return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }));
       }
       if (url === "/api/projects/42") {
-        return Promise.resolve(new Response(JSON.stringify(makeProject()), { status: 200 }));
+        return Promise.resolve(new Response(JSON.stringify(makeProjectWithoutGeneratedContent()), { status: 200 }));
       }
       return Promise.resolve(new Response("{}", { status: 200 }));
     });
@@ -311,5 +361,6 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: /1.*加载上下文.*完成/ })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /11.*保存候选结果.*完成/ })).toBeInTheDocument();
+    expect(await screen.findByText("流式正文候选第一段。")).toBeInTheDocument();
   });
 });

@@ -1,4 +1,4 @@
-import { AlertCircle, CheckCircle2, Circle, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
+import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Circle, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
 import type { GenerationStep, GenerationTask, Project } from "../types";
 
@@ -6,6 +6,8 @@ interface AgentWorkspaceProps {
   project: Project | null;
   task: GenerationTask | null;
   busy: boolean;
+  collapsed: boolean;
+  onToggleCollapsed: () => void;
   onRetry: () => void;
 }
 
@@ -171,7 +173,7 @@ function StepStatusIcon({ status }: { status: string | undefined }) {
   return <Circle size={16} aria-hidden="true" />;
 }
 
-export function AgentWorkspace({ project, task, busy, onRetry }: AgentWorkspaceProps) {
+export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollapsed, onRetry }: AgentWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("flow");
   const [activeFlow, setActiveFlow] = useState<string>("load_context");
   const failed = task?.status === "failed";
@@ -236,20 +238,34 @@ export function AgentWorkspace({ project, task, busy, onRetry }: AgentWorkspaceP
     : activeNode.details;
 
   return (
-    <section className="agent-workspace" aria-label="Agent 创作后台">
+    <section className={collapsed ? "agent-workspace collapsed" : "agent-workspace"} aria-label="Agent 创作后台">
       <div className="backstage-bar">
         <div>
           <h2>Agent 创作后台</h2>
           <span>{task ? `全自动运行 · ${task.status}` : "等待生成"}</span>
         </div>
-        {failed ? (
-          <button className="secondary-button" type="button" onClick={onRetry} disabled={busy} title="重试">
-            <RefreshCw size={16} />
-            <span>重试</span>
+        <div className="toolbar-actions">
+          {failed ? (
+            <button className="secondary-button" type="button" onClick={onRetry} disabled={busy} title="重试">
+              <RefreshCw size={16} />
+              <span>重试</span>
+            </button>
+          ) : null}
+          <button
+            className="icon-text-button"
+            type="button"
+            onClick={onToggleCollapsed}
+            title={collapsed ? "展开后台" : "收起后台"}
+            aria-label={collapsed ? "展开后台" : "收起后台"}
+          >
+            {collapsed ? <ChevronUp size={16} /> : <ChevronDown size={16} />}
+            <span>{collapsed ? "展开" : "收起"}</span>
           </button>
-        ) : null}
+        </div>
       </div>
 
+      {collapsed ? null : (
+      <>
       <div className="backstage-tabs" role="tablist" aria-label="后台视图">
         <button
           className={activeTab === "flow" ? "tab-button active" : "tab-button"}
@@ -293,7 +309,6 @@ export function AgentWorkspace({ project, task, busy, onRetry }: AgentWorkspaceP
               >
                 <StepStatusIcon status={node.status} />
                 <strong>{node.index}. {node.label}</strong>
-                <span className="flow-node-status">{node.statusText}</span>
               </button>
             ))}
           </nav>
@@ -393,6 +408,8 @@ export function AgentWorkspace({ project, task, busy, onRetry }: AgentWorkspaceP
           </details>
         </div>
       ) : null}
+      </>
+      )}
     </section>
   );
 }

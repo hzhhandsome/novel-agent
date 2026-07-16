@@ -5,6 +5,7 @@ import { ProjectCreator } from "./ProjectCreator";
 interface ChapterEditorProps {
   chapter: Chapter | null;
   editorContent: string;
+  liveGeneratedContent: string | null;
   idea: string;
   busy: boolean;
   error: string | null;
@@ -20,6 +21,7 @@ interface ChapterEditorProps {
 export function ChapterEditor({
   chapter,
   editorContent,
+  liveGeneratedContent,
   idea,
   busy,
   error,
@@ -31,6 +33,8 @@ export function ChapterEditor({
   onAccept,
   onReject,
 }: ChapterEditorProps) {
+  const candidateContent = liveGeneratedContent || chapter?.generated_content;
+
   return (
     <main className="editor" aria-label="正文">
       {error ? (
@@ -84,10 +88,10 @@ export function ChapterEditor({
             value={editorContent}
             onChange={(event) => onEditorChange(event.target.value)}
           />
-          {chapter.generated_content ? (
+          {candidateContent ? (
             <section className="candidate" aria-label="生成结果">
               <h2>生成结果</h2>
-              <p>{chapter.generated_content}</p>
+              <p>{candidateContent}</p>
               <div className="toolbar-actions">
                 <button type="button" className="primary-button" onClick={onAccept} disabled={busy} title="采纳">
                   <Check size={16} />

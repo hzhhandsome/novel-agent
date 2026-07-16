@@ -17,6 +17,13 @@ import { ModulePanel } from "./components/ModulePanel";
 import type { Chapter, GenerationTask, Project } from "./types";
 import "./styles.css";
 
+function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: number | null): string | null {
+  if (!task || task.chapter_id !== chapterId) return null;
+  const proseStep = task.steps.find((step) => step.name === "generate_prose");
+  const generated = proseStep?.output_snapshot?.generated_content;
+  return typeof generated === "string" && generated.trim() ? generated : null;
+}
+
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
@@ -24,12 +31,17 @@ export default function App() {
   const [idea, setIdea] = useState("");
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
+  const [backstageCollapsed, setBackstageCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selectedChapter = useMemo(
     () => project?.chapters.find((chapter) => chapter.id === selectedChapterId) ?? null,
     [project, selectedChapterId],
+  );
+  const liveGeneratedContent = useMemo(
+    () => getGeneratedContentFromTask(task, selectedChapterId),
+    [task, selectedChapterId],
   );
 
   function selectChapter(chapter: Chapter) {
@@ -137,7 +149,7 @@ export default function App() {
   }
 
   return (
-    <div className="app-shell">
+    <div className={backstageCollapsed ? "app-shell backstage-collapsed" : "app-shell"}>
       <ChapterSidebar
         chapters={project?.chapters ?? []}
         selectedChapterId={selectedChapterId}
@@ -147,6 +159,7 @@ export default function App() {
       <ChapterEditor
         chapter={selectedChapter}
         editorContent={editorContent}
+        liveGeneratedContent={liveGeneratedContent}
         idea={idea}
         busy={busy}
         error={error}
@@ -165,7 +178,14 @@ export default function App() {
         onInspirationChange={setInspirationText}
         onAddInspiration={handleAddInspiration}
       />
-      <AgentWorkspace project={project} task={task} busy={busy} onRetry={handleRetry} />
+      <AgentWorkspace
+        project={project}
+        task={task}
+        busy={busy}
+        collapsed={backstageCollapsed}
+        onToggleCollapsed={() => setBackstageCollapsed((value) => !value)}
+        onRetry={handleRetry}
+      />
     </div>
   );
 }

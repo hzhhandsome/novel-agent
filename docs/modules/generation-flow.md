@@ -47,6 +47,12 @@
 - `failed`：显示失败。
 - 未返回对应节点步骤：显示等待。
 
+当前第一版不做 token 级逐字正文流。前端使用同一条任务 SSE：
+
+- 后台用所有 `GenerationTaskStep.status` 更新 11 个节点进度。
+- 中部正文区在 `generate_prose.output_snapshot.generated_content` 出现后，立即显示为“生成结果”候选正文。
+- `persist_candidate_result` 完成后再刷新项目数据，保持候选正文和数据库状态一致。
+
 ## 数据和状态
 
 关键模型：
