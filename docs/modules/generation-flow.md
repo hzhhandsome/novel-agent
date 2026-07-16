@@ -53,6 +53,22 @@
 - 中部正文区在 `generate_prose.output_snapshot.generated_content` 出现后，立即显示为“生成结果”候选正文。
 - `persist_candidate_result` 完成后再刷新项目数据，保持候选正文和数据库状态一致。
 
+### 指定章数全自动生成
+
+`POST /api/projects/{project_id}/auto-generate/stream` 返回 `text/event-stream`。
+
+外层任务 `kind` 为 `auto_chapter_generation`，负责记录目标章数、已完成章数、当前章节任务、已自动采纳章节和暂停/失败原因。当前章节仍通过子 `chapter_generation` 任务展示 11 节点进度。
+
+全自动生成只负责循环控制：
+
+- 找到下一章；如果不存在则创建占位章节。
+- 运行现有单章 11 节点生成流程。
+- 检查 `audit_prose` 是否存在阻塞审核发现。
+- 无阻塞时复用采纳流程，把候选正文转为正式正文。
+- 达到指定章数后停止。
+
+如果审核存在阻塞问题，外层任务进入 `paused`，不自动采纳当前章节。模型、节点或数据库失败时，外层任务进入 `failed`，保留当前子任务和错误原因。
+
 ## 数据和状态
 
 关键模型：
@@ -60,6 +76,7 @@
 - `GenerationTask`：一次生成任务。
 - `GenerationTaskStep`：节点级步骤状态。
 - `GenerationRun`：生成记录，包括提示包、输出、审核结果、是否采纳。
+- `auto_chapter_generation`：全自动外层任务类型，复用 `GenerationTask` 记录总进度。
 - `Chapter.generated_content`：生成候选稿。
 - `Chapter.content`：正式采纳正文。
 - `Chapter.summary`：后续章节使用的摘要。
@@ -73,7 +90,8 @@
 - 用户输入审核节点。
 - 自动修订节点。
 - 节点级模型选择。
-- 自动正式入库节点，必须由明确的全自动开关控制。
+- 指定章数全自动生成任务：作为单章 11 节点流程的外层循环控制器，逐章生成、审核、候选保存、自动采纳，再进入下一章。
+- 自动正式入库能力必须由明确的全自动任务控制，并复用采纳流程；`persist_candidate_result` 仍不得直接写正式正文。
 - 更细粒度的摘要、伏笔、角色卡和后续线路确认。
 
 新增节点时必须同步更新任务步骤记录和相关测试。
@@ -99,4 +117,5 @@ python -m pytest -v
 - 模型调用失败时要保留可展示的失败原因。
 - 采纳后才应把候选稿转为正式正文。
 - `persist_candidate_result` 不是自动采纳，不得绕过采纳边界直接污染正式上下文。
+- 全自动生成只能作为外层任务循环复用单章 LangGraph，不要把多个章节的生成逻辑写成不可恢复的大函数。
 - 后续输入锁定、AI 输入评判、LLM 切换都需要考虑当前任务状态和生成记录复现。

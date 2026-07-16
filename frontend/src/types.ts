@@ -70,3 +70,25 @@ export interface GenerationTask {
   chapter: Chapter | null;
   steps: GenerationStep[];
 }
+
+export interface AutoGenerationCompletedChapter {
+  id: number;
+  number: number;
+  title: string;
+}
+
+export interface AutoGenerationTask {
+  id: number;
+  project_id: number;
+  kind: "auto_chapter_generation";
+  status: string;
+  current_step: string | null;
+  error_type: string | null;
+  error_message: string | null;
+  target_count: number;
+  completed_count: number;
+  current_chapter_id: number | null;
+  current_chapter_task: GenerationTask | null;
+  completed_chapters: AutoGenerationCompletedChapter[];
+  steps: GenerationStep[];
+}

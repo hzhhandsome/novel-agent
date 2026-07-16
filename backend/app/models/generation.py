@@ -13,6 +13,7 @@ from app.db.base import Base
 class GenerationTaskStatus(str, Enum):
     pending = "pending"
     running = "running"
+    paused = "paused"
     failed = "failed"
     completed = "completed"
 

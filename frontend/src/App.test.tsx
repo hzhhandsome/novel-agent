@@ -119,7 +119,8 @@ describe("App", () => {
 
     expect(await screen.findByText("全自动")).toBeInTheDocument();
     expect(screen.getByText("开启后自动生成、审核、更新上下文并进入下一章")).toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "暂停" })).toBeInTheDocument();
+    expect(screen.getByLabelText("自动生成章数")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始全自动" })).toBeInTheDocument();
   });
 
   it("shows backstage flow context and combined result tabs", async () => {
@@ -362,5 +363,85 @@ describe("App", () => {
     expect(await screen.findByRole("button", { name: /1.*加载上下文.*完成/ })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /11.*保存候选结果.*完成/ })).toBeInTheDocument();
     expect(await screen.findByText("流式正文候选第一段。")).toBeInTheDocument();
+  });
+
+  it("runs specified-count auto generation and shows total progress", async () => {
+    const encoder = new TextEncoder();
+    const childTask = {
+      id: 21,
+      project_id: 42,
+      chapter_id: 100,
+      kind: "chapter_generation",
+      status: "completed",
+      current_step: "persist_candidate_result",
+      error_type: null,
+      error_message: null,
+      chapter: makeProject().chapters[0],
+      steps: [
+        {
+          id: 1,
+          task_id: 21,
+          name: "generate_prose",
+          status: "completed",
+          input_snapshot: {},
+          output_snapshot: { generated_content: "全自动生成的正文。" },
+          error_message: null,
+        },
+        {
+          id: 2,
+          task_id: 21,
+          name: "persist_candidate_result",
+          status: "completed",
+          input_snapshot: {},
+          output_snapshot: { persistence_result: { saved_candidate: true } },
+          error_message: null,
+        },
+      ],
+    };
+    const autoTask = {
+      id: 30,
+      project_id: 42,
+      kind: "auto_chapter_generation",
+      status: "completed",
+      current_step: "auto_chapter_1",
+      error_type: null,
+      error_message: null,
+      target_count: 1,
+      completed_count: 1,
+      current_chapter_id: 100,
+      current_chapter_task: childTask,
+      completed_chapters: [{ id: 100, number: 1, title: "异常出现" }],
+      steps: [],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url === "/api/projects") {
+        return Promise.resolve(new Response(JSON.stringify([makeProjectWithoutGeneratedContent()]), { status: 200 }));
+      }
+      if (url === "/api/projects/42/auto-generate/stream") {
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`event: auto_task\ndata: ${JSON.stringify(autoTask)}\n\n`));
+            controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
+            controller.close();
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }));
+      }
+      if (url === "/api/projects/42") {
+        return Promise.resolve(new Response(JSON.stringify(makeProject()), { status: 200 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+
+    render(<App />);
+    await screen.findByRole("button", { name: /异常出现/ });
+
+    fireEvent.change(screen.getByLabelText("自动生成章数"), { target: { value: "1" } });
+    fireEvent.click(screen.getByRole("button", { name: "开始全自动" }));
+
+    expect(await screen.findByText("全自动：1 / 1")).toBeInTheDocument();
+    expect(await screen.findByText("全自动生成的正文。")).toBeInTheDocument();
   });
 });

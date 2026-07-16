@@ -7,6 +7,7 @@ import {
   listProjects,
   rejectChapter,
   retryTask,
+  streamAutoGenerateChapters,
   streamGenerateChapter,
   updateChapter,
 } from "./api/client";
@@ -14,7 +15,7 @@ import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ChapterEditor } from "./components/ChapterEditor";
 import { ChapterSidebar } from "./components/ChapterSidebar";
 import { ModulePanel } from "./components/ModulePanel";
-import type { Chapter, GenerationTask, Project } from "./types";
+import type { AutoGenerationTask, Chapter, GenerationTask, Project } from "./types";
 import "./styles.css";
 
 function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: number | null): string | null {
@@ -28,9 +29,11 @@ export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
   const [editorContent, setEditorContent] = useState("");
+  const [autoChapterCount, setAutoChapterCount] = useState("3");
   const [idea, setIdea] = useState("");
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
+  const [autoTask, setAutoTask] = useState<AutoGenerationTask | null>(null);
   const [backstageCollapsed, setBackstageCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -114,6 +117,26 @@ export default function App() {
     });
   }
 
+  function handleAutoGenerate() {
+    if (!project) return;
+    const chapterCount = Number.parseInt(autoChapterCount, 10);
+    if (!Number.isFinite(chapterCount) || chapterCount < 1) {
+      setError("自动生成章数必须大于 0");
+      return;
+    }
+    void runBusy(async () => {
+      const generated = await streamAutoGenerateChapters(project.id, chapterCount, (nextAutoTask) => {
+        setAutoTask(nextAutoTask);
+        if (nextAutoTask.current_chapter_task) {
+          setTask(nextAutoTask.current_chapter_task);
+        }
+      });
+      if (generated) {
+        await refreshProject(generated.project_id);
+      }
+    });
+  }
+
   function handleAccept() {
     if (!selectedChapter) return;
     void runBusy(async () => {
@@ -160,14 +183,18 @@ export default function App() {
         chapter={selectedChapter}
         editorContent={editorContent}
         liveGeneratedContent={liveGeneratedContent}
+        autoChapterCount={autoChapterCount}
+        autoTask={autoTask}
         idea={idea}
         busy={busy}
         error={error}
         onIdeaChange={setIdea}
+        onAutoChapterCountChange={setAutoChapterCount}
         onCreateProject={handleCreateProject}
         onEditorChange={setEditorContent}
         onSave={handleSave}
         onGenerate={handleGenerate}
+        onAutoGenerate={handleAutoGenerate}
         onAccept={handleAccept}
         onReject={handleReject}
       />

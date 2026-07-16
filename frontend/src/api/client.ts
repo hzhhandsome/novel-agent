@@ -1,4 +1,4 @@
-import type { Chapter, GenerationTask, Inspiration, Project } from "../types";
+import type { AutoGenerationTask, Chapter, GenerationTask, Inspiration, Project } from "../types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -70,6 +70,50 @@ export async function streamGenerateChapter(
       if (payload.id) {
         latest = payload as GenerationTask;
         onTask(latest);
+      }
+    }
+  }
+
+  return latest;
+}
+
+export async function streamAutoGenerateChapters(
+  projectId: number,
+  chapterCount: number,
+  onAutoTask: (task: AutoGenerationTask) => void,
+): Promise<AutoGenerationTask | null> {
+  const response = await fetch(`/api/projects/${projectId}/auto-generate/stream`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ chapter_count: chapterCount }),
+  });
+  if (!response.ok) {
+    const text = await response.text();
+    throw new Error(text || `HTTP ${response.status}`);
+  }
+  if (!response.body) {
+    throw new Error("浏览器不支持流式响应");
+  }
+
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = "";
+  let latest: AutoGenerationTask | null = null;
+
+  while (true) {
+    const { value, done } = await reader.read();
+    if (done) break;
+    buffer += decoder.decode(value, { stream: true });
+    const chunks = buffer.split("\n\n");
+    buffer = chunks.pop() ?? "";
+
+    for (const chunk of chunks) {
+      const dataLine = chunk.split("\n").find((line) => line.startsWith("data: "));
+      if (!dataLine) continue;
+      const payload = JSON.parse(dataLine.slice(6));
+      if (payload.id) {
+        latest = payload as AutoGenerationTask;
+        onAutoTask(latest);
       }
     }
   }

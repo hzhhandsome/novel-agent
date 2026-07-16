@@ -13,6 +13,7 @@ from app.services.chapter_service import (
     get_generation_task,
     list_interrupted_tasks,
     retry_generation_task,
+    stream_auto_generate_chapters,
     stream_chapter_generation_candidate,
 )
 
@@ -21,6 +22,10 @@ router = APIRouter(tags=["generation"])
 
 class GenerateChapterRequest(BaseModel):
     fail_at: str | None = None
+
+
+class AutoGenerateRequest(BaseModel):
+    chapter_count: int
 
 
 @router.post("/api/chapters/{chapter_id}/generate")
@@ -42,6 +47,22 @@ def generate_chapter_stream(
         for task in stream_chapter_generation_candidate(session, chapter_id):
             yield "event: task\n"
             yield f"data: {json.dumps(_task_to_dict(task), ensure_ascii=False)}\n\n"
+        yield "event: done\n"
+        yield "data: {}\n\n"
+
+    return StreamingResponse(events(), media_type="text/event-stream")
+
+
+@router.post("/api/projects/{project_id}/auto-generate/stream")
+def auto_generate_chapters_stream(
+    project_id: int,
+    payload: AutoGenerateRequest,
+    session: Session = Depends(get_session),
+) -> StreamingResponse:
+    def events():
+        for task in stream_auto_generate_chapters(session, project_id, payload.chapter_count):
+            yield "event: auto_task\n"
+            yield f"data: {json.dumps(task, ensure_ascii=False)}\n\n"
         yield "event: done\n"
         yield "data: {}\n\n"
 

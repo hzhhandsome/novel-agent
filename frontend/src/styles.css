@@ -319,6 +319,24 @@ button:disabled {
   color: #9a5b18;
 }
 
+.compact-number-field {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  color: #68716a;
+  font-size: 12px;
+}
+
+.compact-number-field input {
+  width: 64px;
+  min-height: 34px;
+  border: 1px solid #cfd7ce;
+  border-radius: 8px;
+  padding: 0 8px;
+  color: #202124;
+  background: #ffffff;
+}
+
 .backstage-bar {
   min-height: 56px;
   padding: 0 16px;
