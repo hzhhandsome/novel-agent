@@ -61,6 +61,31 @@ function makeProjectWithoutGeneratedContent() {
   };
 }
 
+function makeProjectWithAcceptedSecondChapter() {
+  const project = makeProjectWithoutGeneratedContent();
+  return {
+    ...project,
+    chapters: [
+      {
+        ...project.chapters[0],
+        status: "accepted" as const,
+        content: "chapter one accepted content",
+        generated_content: null,
+      },
+      {
+        id: 101,
+        project_id: 42,
+        number: 2,
+        title: "Chapter Two",
+        status: "accepted" as const,
+        content: "chapter two accepted content",
+        generated_content: null,
+        summary: "chapter two summary",
+      },
+    ],
+  };
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -452,6 +477,88 @@ describe("App", () => {
     expect(await screen.findByText("全自动：1 / 1")).toBeInTheDocument();
     await waitFor(() => {
       expect(screen.getByLabelText("章节正文")).toHaveValue("全自动生成的正文。");
+    });
+  });
+  it("keeps the generated chapter selected after auto generation refreshes the project", async () => {
+    const encoder = new TextEncoder();
+    const secondChapter = makeProjectWithAcceptedSecondChapter().chapters[1];
+    const childTask = {
+      id: 22,
+      project_id: 42,
+      chapter_id: 101,
+      kind: "chapter_generation",
+      status: "completed",
+      current_step: "persist_candidate_result",
+      error_type: null,
+      error_message: null,
+      chapter: secondChapter,
+      steps: [
+        {
+          id: 1,
+          task_id: 22,
+          name: "generate_prose",
+          status: "completed",
+          input_snapshot: {},
+          output_snapshot: { generated_content: "chapter two streamed candidate" },
+          error_message: null,
+        },
+        {
+          id: 2,
+          task_id: 22,
+          name: "persist_candidate_result",
+          status: "completed",
+          input_snapshot: {},
+          output_snapshot: { persistence_result: { saved_candidate: true } },
+          error_message: null,
+        },
+      ],
+    };
+    const autoTask = {
+      id: 31,
+      project_id: 42,
+      kind: "auto_chapter_generation",
+      status: "completed",
+      current_step: "auto_chapter_1",
+      error_type: null,
+      error_message: null,
+      target_count: 1,
+      completed_count: 1,
+      current_chapter_id: 101,
+      current_chapter_task: childTask,
+      completed_chapters: [{ id: 101, number: 2, title: "Chapter Two" }],
+      steps: [],
+    };
+
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url === "/api/projects") {
+        return Promise.resolve(new Response(JSON.stringify([makeProjectWithoutGeneratedContent()]), { status: 200 }));
+      }
+      if (url === "/api/projects/42/auto-generate/stream") {
+        const body = new ReadableStream({
+          start(controller) {
+            controller.enqueue(encoder.encode(`event: auto_task\ndata: ${JSON.stringify(autoTask)}\n\n`));
+            controller.enqueue(encoder.encode("event: done\ndata: {}\n\n"));
+            controller.close();
+          },
+        });
+        return Promise.resolve(new Response(body, { status: 200, headers: { "Content-Type": "text/event-stream" } }));
+      }
+      if (url === "/api/projects/42") {
+        return Promise.resolve(new Response(JSON.stringify(makeProjectWithAcceptedSecondChapter()), { status: 200 }));
+      }
+      return Promise.resolve(new Response("{}", { status: 200 }));
+    });
+
+    render(<App />);
+    await screen.findByRole("button", { name: /异常出现/ });
+
+    fireEvent.change(document.querySelector('input[type="number"]') as HTMLInputElement, { target: { value: "1" } });
+    fireEvent.click(document.querySelector(".top-generation-toolbar .primary-button") as HTMLButtonElement);
+
+    expect(await screen.findByRole("heading", { name: "Chapter Two" })).toBeInTheDocument();
+    await waitFor(() => {
+      expect(document.querySelector(".chapter-textarea")).toHaveValue("chapter two streamed candidate");
     });
   });
 });

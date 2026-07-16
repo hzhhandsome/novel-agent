@@ -75,11 +75,15 @@ export default function App() {
     });
   }, []);
 
-  async function refreshProject(projectId = project?.id, visibleTask: GenerationTask | null = task) {
+  async function refreshProject(
+    projectId = project?.id,
+    visibleTask: GenerationTask | null = task,
+    preferredChapterId = selectedChapterId,
+  ) {
     if (!projectId) return;
     const next = await getProject(projectId);
     setProject(next);
-    const current = next.chapters.find((chapter) => chapter.id === selectedChapterId) ?? next.chapters[0] ?? null;
+    const current = next.chapters.find((chapter) => chapter.id === preferredChapterId) ?? next.chapters[0] ?? null;
     if (current) {
       const liveContent = getGeneratedContentFromTask(visibleTask, current.id);
       setSelectedChapterId(current.id);
@@ -119,7 +123,7 @@ export default function App() {
     void runBusy(async () => {
       const generated = await streamGenerateChapter(selectedChapter.id, setTask);
       if (generated) {
-        await refreshProject(generated.project_id, generated);
+        await refreshProject(generated.project_id, generated, generated.chapter_id);
       }
     });
   }
@@ -142,7 +146,8 @@ export default function App() {
         }
       });
       if (generated) {
-        await refreshProject(generated.project_id, generated.current_chapter_task);
+        const preferredChapterId = generated.current_chapter_id ?? generated.current_chapter_task?.chapter_id ?? selectedChapterId;
+        await refreshProject(generated.project_id, generated.current_chapter_task, preferredChapterId);
       }
     });
   }
@@ -177,7 +182,7 @@ export default function App() {
     void runBusy(async () => {
       const nextTask = await retryTask(task.id);
       setTask(nextTask);
-      await refreshProject(nextTask.project_id);
+      await refreshProject(nextTask.project_id, nextTask, nextTask.chapter_id);
     });
   }
 
