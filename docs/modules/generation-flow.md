@@ -50,8 +50,10 @@
 当前第一版不做 token 级逐字正文流。前端使用同一条任务 SSE：
 
 - 后台用所有 `GenerationTaskStep.status` 更新 11 个节点进度。
-- 中部正文区在 `generate_prose.output_snapshot.generated_content` 出现后，立即显示为“生成结果”候选正文。
+- 中部正文区在 `generate_prose.output_snapshot.generated_content` 出现后，立即写入章节正文 textarea，作为当前候选正文展示。
 - `persist_candidate_result` 完成后再刷新项目数据，保持候选正文和数据库状态一致。
+
+生成期间正文 textarea 必须禁用，避免用户在提示包、生成结果和候选保存尚未稳定时修改正文。候选正文的采纳和拒绝入口放在正文工具栏，不再使用独立“生成结果”展示块。
 
 ### 指定章数全自动生成
 

@@ -260,14 +260,6 @@ button:disabled {
   min-height: 90px;
 }
 
-.candidate {
-  margin-top: 16px;
-  padding: 14px;
-  border: 1px solid #d9c98d;
-  border-radius: 8px;
-  background: #fffaf0;
-}
-
 .top-generation-toolbar {
   margin-bottom: 12px;
   padding: 10px 12px;

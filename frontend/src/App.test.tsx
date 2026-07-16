@@ -4,6 +4,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
 import { AgentWorkspace } from "./components/AgentWorkspace";
+import { ChapterEditor } from "./components/ChapterEditor";
 
 function makeProject() {
   return {
@@ -87,6 +88,10 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: /异常出现/ })).toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "异常出现" })).toBeInTheDocument();
+    expect(screen.getByLabelText("章节正文")).toHaveValue("雨水敲在废城图书馆的穹顶上。");
+    expect(screen.queryByRole("region", { name: "生成结果" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "采纳" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "拒绝" })).toBeInTheDocument();
   });
 
   it("shows an error when project creation fails", async () => {
@@ -362,7 +367,10 @@ describe("App", () => {
 
     expect(await screen.findByRole("button", { name: /1.*加载上下文.*完成/ })).toBeInTheDocument();
     expect(await screen.findByRole("button", { name: /11.*保存候选结果.*完成/ })).toBeInTheDocument();
-    expect(await screen.findByText("流式正文候选第一段。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("章节正文")).toHaveValue("流式正文候选第一段。");
+    });
+    expect(screen.queryByRole("region", { name: "生成结果" })).not.toBeInTheDocument();
   });
 
   it("runs specified-count auto generation and shows total progress", async () => {
@@ -442,6 +450,36 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "开始全自动" }));
 
     expect(await screen.findByText("全自动：1 / 1")).toBeInTheDocument();
-    expect(await screen.findByText("全自动生成的正文。")).toBeInTheDocument();
+    await waitFor(() => {
+      expect(screen.getByLabelText("章节正文")).toHaveValue("全自动生成的正文。");
+    });
+  });
+});
+
+describe("ChapterEditor", () => {
+  it("locks the chapter body while generation is busy", () => {
+    render(
+      <ChapterEditor
+        chapter={makeProject().chapters[0]}
+        editorContent="生成中的正文"
+        liveGeneratedContent={null}
+        autoChapterCount="3"
+        autoTask={null}
+        idea=""
+        busy={true}
+        error={null}
+        onIdeaChange={() => undefined}
+        onAutoChapterCountChange={() => undefined}
+        onCreateProject={() => undefined}
+        onEditorChange={() => undefined}
+        onSave={() => undefined}
+        onGenerate={() => undefined}
+        onAutoGenerate={() => undefined}
+        onAccept={() => undefined}
+        onReject={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("章节正文")).toBeDisabled();
   });
 });

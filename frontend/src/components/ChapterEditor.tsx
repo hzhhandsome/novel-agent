@@ -104,29 +104,27 @@ export function ChapterEditor({
                 <Zap size={16} />
                 <span>生成</span>
               </button>
+              {candidateContent ? (
+                <>
+                  <button type="button" className="primary-button" onClick={onAccept} disabled={busy} title="采纳">
+                    <Check size={16} />
+                    <span>采纳</span>
+                  </button>
+                  <button type="button" className="secondary-button" onClick={onReject} disabled={busy} title="拒绝">
+                    <X size={16} />
+                    <span>拒绝</span>
+                  </button>
+                </>
+              ) : null}
             </div>
           </div>
           <textarea
+            aria-label="章节正文"
             className="chapter-textarea"
             value={editorContent}
+            disabled={busy}
             onChange={(event) => onEditorChange(event.target.value)}
           />
-          {candidateContent ? (
-            <section className="candidate" aria-label="生成结果">
-              <h2>生成结果</h2>
-              <p>{candidateContent}</p>
-              <div className="toolbar-actions">
-                <button type="button" className="primary-button" onClick={onAccept} disabled={busy} title="采纳">
-                  <Check size={16} />
-                  <span>采纳</span>
-                </button>
-                <button type="button" className="secondary-button" onClick={onReject} disabled={busy} title="拒绝">
-                  <X size={16} />
-                  <span>拒绝</span>
-                </button>
-              </div>
-            </section>
-          ) : null}
         </>
       )}
     </main>

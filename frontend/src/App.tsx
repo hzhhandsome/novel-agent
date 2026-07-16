@@ -49,15 +49,21 @@ export default function App() {
 
   function selectChapter(chapter: Chapter) {
     setSelectedChapterId(chapter.id);
-    setEditorContent(chapter.content ?? "");
+    setEditorContent(chapter.content ?? chapter.generated_content ?? "");
   }
 
   function loadProject(next: Project) {
     setProject(next);
     const first = next.chapters[0] ?? null;
     setSelectedChapterId(first?.id ?? null);
-    setEditorContent(first?.content ?? "");
+    setEditorContent(first?.content ?? first?.generated_content ?? "");
   }
+
+  useEffect(() => {
+    if (liveGeneratedContent) {
+      setEditorContent(liveGeneratedContent);
+    }
+  }, [liveGeneratedContent]);
 
   useEffect(() => {
     void runBusy(async () => {
@@ -69,14 +75,15 @@ export default function App() {
     });
   }, []);
 
-  async function refreshProject(projectId = project?.id) {
+  async function refreshProject(projectId = project?.id, visibleTask: GenerationTask | null = task) {
     if (!projectId) return;
     const next = await getProject(projectId);
     setProject(next);
     const current = next.chapters.find((chapter) => chapter.id === selectedChapterId) ?? next.chapters[0] ?? null;
     if (current) {
+      const liveContent = getGeneratedContentFromTask(visibleTask, current.id);
       setSelectedChapterId(current.id);
-      setEditorContent(current.content ?? "");
+      setEditorContent(liveContent ?? current.content ?? current.generated_content ?? "");
     }
   }
 
@@ -112,7 +119,7 @@ export default function App() {
     void runBusy(async () => {
       const generated = await streamGenerateChapter(selectedChapter.id, setTask);
       if (generated) {
-        await refreshProject(generated.project_id);
+        await refreshProject(generated.project_id, generated);
       }
     });
   }
@@ -127,12 +134,15 @@ export default function App() {
     void runBusy(async () => {
       const generated = await streamAutoGenerateChapters(project.id, chapterCount, (nextAutoTask) => {
         setAutoTask(nextAutoTask);
+        if (nextAutoTask.current_chapter_id) {
+          setSelectedChapterId(nextAutoTask.current_chapter_id);
+        }
         if (nextAutoTask.current_chapter_task) {
           setTask(nextAutoTask.current_chapter_task);
         }
       });
       if (generated) {
-        await refreshProject(generated.project_id);
+        await refreshProject(generated.project_id, generated.current_chapter_task);
       }
     });
   }
@@ -141,7 +151,7 @@ export default function App() {
     if (!selectedChapter) return;
     void runBusy(async () => {
       await acceptChapter(selectedChapter.id);
-      await refreshProject();
+      await refreshProject(project?.id, null);
     });
   }
 
@@ -149,7 +159,7 @@ export default function App() {
     if (!selectedChapter) return;
     void runBusy(async () => {
       await rejectChapter(selectedChapter.id);
-      await refreshProject();
+      await refreshProject(project?.id, null);
     });
   }
 
