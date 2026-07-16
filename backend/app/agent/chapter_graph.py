@@ -267,7 +267,22 @@ def _judge_character_period(provider: ModelProvider) -> NodeFn:
         characters = [
             f"{item.get('name', '')}：{item.get('current_goal', '')}" for item in package.get("characters", [])
         ]
-        decisions = provider.judge_character_period(state.get("generated_content", ""), state.get("context", ""), characters)
+        try:
+            decisions = provider.judge_character_period(
+                state.get("generated_content", ""),
+                state.get("context", ""),
+                characters,
+            )
+        except Exception as exc:
+            decisions = {
+                "updates": [],
+                "new_period_cards": [],
+                "relationship_changes": [],
+                "memory_changes": [],
+                "stage_changed": False,
+                "skipped": True,
+                "error": str(exc),
+            }
         return {"character_period_decisions": _normalize_decisions(decisions)}
 
     return run

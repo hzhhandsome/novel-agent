@@ -31,6 +31,8 @@
 
 `persist_candidate_result` 只保存候选结果和过程，不自动把候选正文采纳为正式正文，也不直接修改正式角色卡、伏笔表或后续章节标题。正式采纳仍由章节采纳流程负责。
 
+`judge_character_period` 属于非关键判断节点。真实 LLM 返回非法 JSON 时，该节点记录 `skipped=true` 和错误信息，并输出空角色变化结果，让章节正文、摘要、审核、伏笔和候选保存继续完成。正文生成、审核、摘要和候选保存仍保持严格失败策略。
+
 ### SSE 进度输出
 
 `POST /api/chapters/{chapter_id}/generate/stream` 返回 `text/event-stream`，用于前端实时显示节点进度。
