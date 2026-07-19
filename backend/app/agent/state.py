@@ -23,6 +23,9 @@ class ChapterGenerationState(TypedDict, total=False):
     audit_result: dict
     summary: str
     summary_result: dict
+    generation_model_config: dict
+    audit_model_config: dict
+    summary_model_config: dict
     character_updates: list[str]
     foreshadowing_updates: list[str]
     foreshadowing_decisions: dict

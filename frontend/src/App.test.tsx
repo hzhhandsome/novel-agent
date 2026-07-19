@@ -195,6 +195,29 @@ describe("App", () => {
               model: "deepseek-v4-flash",
               max_tokens: 2048,
               api_key_set: true,
+              routes: {
+                generation: {
+                  provider: "deepseek",
+                  base_url: "https://api.deepseek.com/anthropic",
+                  model: "writer-model-v2",
+                  max_tokens: 2048,
+                  api_key_set: true,
+                },
+                audit: {
+                  provider: "deepseek",
+                  base_url: "https://api.deepseek.com/anthropic",
+                  model: "audit-model-v2",
+                  max_tokens: 2048,
+                  api_key_set: true,
+                },
+                summary: {
+                  provider: "deepseek",
+                  base_url: "https://api.deepseek.com/anthropic",
+                  model: "summary-model-v2",
+                  max_tokens: 2048,
+                  api_key_set: true,
+                },
+              },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -209,6 +232,15 @@ describe("App", () => {
               model: "mock-model",
               max_tokens: 4096,
               api_key_set: false,
+              routes: {
+                generation: {
+                  provider: "mock",
+                  base_url: "https://api.deepseek.com/anthropic",
+                  model: "writer-model",
+                  max_tokens: 4096,
+                  api_key_set: false,
+                },
+              },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -224,16 +256,23 @@ describe("App", () => {
     render(<App />);
 
     expect(await screen.findByLabelText("模型名称")).toHaveValue("mock-model");
+    expect(screen.getByLabelText("生成模型")).toHaveValue("writer-model");
     fireEvent.change(screen.getByLabelText("模型供应商"), { target: { value: "deepseek" } });
     fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "deepseek-v4-flash" } });
     fireEvent.change(screen.getByLabelText("模型最大 token"), { target: { value: "2048" } });
     fireEvent.change(screen.getByLabelText("模型 API Key"), { target: { value: "secret-key" } });
+    fireEvent.change(screen.getByLabelText("生成模型"), { target: { value: "writer-model-v2" } });
+    fireEvent.change(screen.getByLabelText("审核模型"), { target: { value: "audit-model-v2" } });
+    fireEvent.change(screen.getByLabelText("摘要模型"), { target: { value: "summary-model-v2" } });
     fireEvent.click(screen.getByRole("button", { name: "保存模型" }));
 
     await waitFor(() => {
       expect(savedBody).toContain("deepseek-v4-flash");
     });
     expect(savedBody).toContain("secret-key");
+    expect(JSON.parse(savedBody).routes.generation.model).toBe("writer-model-v2");
+    expect(JSON.parse(savedBody).routes.audit.model).toBe("audit-model-v2");
+    expect(JSON.parse(savedBody).routes.summary.model).toBe("summary-model-v2");
     expect(screen.getByText("密钥已设置")).toBeInTheDocument();
   });
 

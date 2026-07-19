@@ -1,4 +1,6 @@
-from pydantic import BaseModel, ConfigDict
+from __future__ import annotations
+
+from pydantic import BaseModel, ConfigDict, Field
 
 
 class TaskStepRead(BaseModel):
@@ -34,6 +36,7 @@ class ModelConfigRead(BaseModel):
     model: str
     max_tokens: int
     api_key_set: bool
+    routes: dict[str, ModelConfigRead] = Field(default_factory=dict)
 
 
 class ModelConfigUpdate(BaseModel):
@@ -42,3 +45,4 @@ class ModelConfigUpdate(BaseModel):
     model: str | None = None
     max_tokens: int | None = None
     api_key: str | None = None
+    routes: dict[str, ModelConfigUpdate | None] | None = None

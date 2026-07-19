@@ -52,7 +52,11 @@ def stream_chapter_generation_candidate(
     session.refresh(task)
     yield get_generation_task(session, task.id)
 
-    graph = build_chapter_generation_graph(session, provider or get_model_provider_from_snapshot(task.model_config_snapshot))
+    graph = build_chapter_generation_graph(
+        session,
+        provider or get_model_provider_from_snapshot(task.model_config_snapshot),
+        model_config_snapshot=None if provider else task.model_config_snapshot,
+    )
     initial_state = {
         "task_id": task.id,
         "project_id": task.project_id,
@@ -82,6 +86,7 @@ def stream_auto_generate_chapters(
 
     model_config_snapshot = get_model_config_snapshot()
     model_provider = provider or get_model_provider_from_snapshot(model_config_snapshot)
+    child_model_config_snapshot = None if provider else model_config_snapshot
     auto_task = GenerationTask(
         project_id=project_id,
         chapter_id=None,
@@ -117,7 +122,7 @@ def stream_auto_generate_chapters(
             session,
             chapter.id,
             provider=model_provider,
-            model_config_snapshot=model_config_snapshot,
+            model_config_snapshot=child_model_config_snapshot,
         ):
             current_child_task = child_task
             yield _auto_task_to_dict(session, auto_task, chapter_count, completed_chapters, current_child_task)
@@ -506,6 +511,7 @@ def _run_generation_task(
     graph = build_chapter_generation_graph(
         session,
         provider or get_model_provider_from_snapshot(task.model_config_snapshot),
+        model_config_snapshot=None if provider else task.model_config_snapshot,
     )
     initial_state = {
         "task_id": task.id,

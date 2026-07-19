@@ -62,13 +62,27 @@
 
 当前切换配置是进程内状态，重启后回到环境变量配置。项目级模型配置和节点级模型路由属于后续需求。
 
+## 模型路由
+
+当前支持第一阶段节点级路由：
+
+- `generation`：用于 `generate_prose` 正文生成节点。
+- `audit`：用于 `audit_prose` 审核节点。
+- `summary`：用于 `summarize_chapter` 摘要节点。
+
+`GET /api/model-config` 会返回 `routes`。`PUT /api/model-config` 可以写入或清除三类路由；路由未配置时继承任务默认模型配置。前端第一阶段只开放三类路由的模型名字段，provider、base URL 和 max tokens 继承当前默认配置，避免工具条过度复杂。
+
+新建任务时，`GenerationTask.model_config_snapshot` 会同时保存默认配置和路由配置。重试任务时继续使用任务快照中的路由，不读取后续全局切换结果。三类路由节点会在 `GenerationTaskStep.output_snapshot` 中保存本节点实际使用的公开模型配置，例如 `generation_model_config`、`audit_model_config` 和 `summary_model_config`。
+
+API key 仍只保存在运行时内存中，不返回前端，也不写入默认或路由快照。
+
 ## 扩展点
 
 后续可添加：
 
 - 运行时全局模型切换。
 - 项目级模型配置。
-- 节点级模型配置。
+- 节点级模型配置已经覆盖正文生成、审核和摘要三类 P0 路由；更多节点路由可后续扩展。
 - 模型调用成本、耗时和失败原因记录。
 - 温度、最大 token、超时和重试策略。
 

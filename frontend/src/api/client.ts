@@ -150,6 +150,7 @@ export function updateModelConfig(payload: {
   model?: string;
   max_tokens?: number;
   api_key?: string;
+  routes?: Record<string, Partial<ModelConfig> | null>;
 }): Promise<ModelConfig> {
   return request<ModelConfig>("/api/model-config", {
     method: "PUT",

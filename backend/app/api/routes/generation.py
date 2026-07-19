@@ -43,6 +43,12 @@ def update_model_config(payload: ModelConfigUpdate) -> dict:
         model=payload.model,
         max_tokens=payload.max_tokens,
         api_key=payload.api_key,
+        routes={
+            route: value.model_dump(exclude_unset=True) if value is not None else None
+            for route, value in (payload.routes or {}).items()
+        }
+        if payload.routes is not None
+        else None,
     )
 
 

@@ -104,6 +104,7 @@ export interface ModelConfig {
   model: string;
   max_tokens: number;
   api_key_set: boolean;
+  routes?: Record<string, ModelConfig>;
 }
 
 export interface AutoGenerationCompletedChapter {

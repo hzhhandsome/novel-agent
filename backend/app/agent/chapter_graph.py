@@ -11,6 +11,7 @@ from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.review import ReviewFinding
 from app.services.model_provider import ModelProvider
+from app.services.provider_factory import get_model_provider_from_snapshot
 from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
@@ -25,15 +26,43 @@ SECTION_BUDGETS = {
 }
 
 
-def build_chapter_generation_graph(session: Session, provider: ModelProvider):
+def build_chapter_generation_graph(
+    session: Session,
+    provider: ModelProvider,
+    model_config_snapshot: dict | None = None,
+):
     workflow = StateGraph(ChapterGenerationState)
+    generation_provider = _provider_for_route(provider, model_config_snapshot, "generation")
+    audit_provider = _provider_for_route(provider, model_config_snapshot, "audit")
+    summary_provider = _provider_for_route(provider, model_config_snapshot, "summary")
 
     workflow.add_node("load_context", _persisted_step(session, "load_context", _load_context(session)))
     workflow.add_node("build_chapter_target", _persisted_step(session, "build_chapter_target", _build_chapter_target))
     workflow.add_node("build_prompt_package", _persisted_step(session, "build_prompt_package", _build_prompt_package))
-    workflow.add_node("generate_prose", _persisted_step(session, "generate_prose", _generate_prose(provider)))
-    workflow.add_node("audit_prose", _persisted_step(session, "audit_prose", _audit_prose(provider)))
-    workflow.add_node("summarize_chapter", _persisted_step(session, "summarize_chapter", _summarize_chapter(provider)))
+    workflow.add_node(
+        "generate_prose",
+        _persisted_step(
+            session,
+            "generate_prose",
+            _generate_prose(generation_provider, _route_config_snapshot(model_config_snapshot, "generation")),
+        ),
+    )
+    workflow.add_node(
+        "audit_prose",
+        _persisted_step(
+            session,
+            "audit_prose",
+            _audit_prose(audit_provider, _route_config_snapshot(model_config_snapshot, "audit")),
+        ),
+    )
+    workflow.add_node(
+        "summarize_chapter",
+        _persisted_step(
+            session,
+            "summarize_chapter",
+            _summarize_chapter(summary_provider, _route_config_snapshot(model_config_snapshot, "summary")),
+        ),
+    )
     workflow.add_node("judge_foreshadowing", _persisted_step(session, "judge_foreshadowing", _judge_foreshadowing(provider)))
     workflow.add_node(
         "judge_character_period",
@@ -62,6 +91,25 @@ def build_chapter_generation_graph(session: Session, provider: ModelProvider):
     workflow.add_edge("build_candidate_result", "persist_candidate_result")
     workflow.add_edge("persist_candidate_result", END)
     return workflow.compile()
+
+
+def _provider_for_route(provider: ModelProvider, model_config_snapshot: dict | None, route: str) -> ModelProvider:
+    if not model_config_snapshot:
+        return provider
+    return get_model_provider_from_snapshot(model_config_snapshot, route=route)
+
+
+def _route_config_snapshot(model_config_snapshot: dict | None, route: str) -> dict:
+    if not model_config_snapshot:
+        return {}
+    routes = model_config_snapshot.get("routes")
+    if isinstance(routes, dict) and isinstance(routes.get(route), dict):
+        return dict(routes[route])
+    return {
+        key: model_config_snapshot[key]
+        for key in ("provider", "base_url", "model", "max_tokens", "api_key_set")
+        if key in model_config_snapshot
+    }
 
 
 def _persisted_step(session: Session, name: str, fn: NodeFn) -> NodeFn:
@@ -139,6 +187,9 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
             "audit_result",
             "summary",
             "summary_result",
+            "generation_model_config",
+            "audit_model_config",
+            "summary_model_config",
             "character_updates",
             "foreshadowing_updates",
             "foreshadowing_decisions",
@@ -455,12 +506,13 @@ def _build_prompt_package(state: ChapterGenerationState) -> ChapterGenerationSta
     return {"prompt_package": prompt_package}
 
 
-def _generate_prose(provider: ModelProvider) -> NodeFn:
+def _generate_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         result = provider.generate_chapter(state["prompt_package"])
         return {
             "generated_content": result.content,
             "draft_summary": result.summary,
+            "generation_model_config": model_config,
             "character_updates": result.character_updates,
             "foreshadowing_updates": result.foreshadowing_updates,
         }
@@ -468,7 +520,7 @@ def _generate_prose(provider: ModelProvider) -> NodeFn:
     return run
 
 
-def _audit_prose(provider: ModelProvider) -> NodeFn:
+def _audit_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         findings = provider.review_chapter(state["generated_content"], state["prompt_package"])
         serialized = [
@@ -483,17 +535,19 @@ def _audit_prose(provider: ModelProvider) -> NodeFn:
         return {
             "review_findings": serialized,
             "audit_result": {"findings": serialized, "blocking": any(item["blocking"] for item in serialized)},
+            "audit_model_config": model_config,
         }
 
     return run
 
 
-def _summarize_chapter(provider: ModelProvider) -> NodeFn:
+def _summarize_chapter(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         summary = provider.summarize_chapter(state.get("generated_content", ""))
         return {
             "summary": summary,
             "summary_result": {"summary": summary, "source": "post_audit"},
+            "summary_model_config": model_config,
         }
 
     return run

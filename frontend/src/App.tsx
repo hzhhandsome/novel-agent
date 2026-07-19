@@ -33,6 +33,7 @@ const defaultModelConfig: ModelConfig = {
   model: "deepseek-v4-flash",
   max_tokens: 4096,
   api_key_set: false,
+  routes: {},
 };
 
 function isModelConfig(value: unknown): value is ModelConfig {
@@ -204,12 +205,30 @@ export default function App() {
 
   function handleSaveModelConfig() {
     void runBusy(async () => {
+      const routes = Object.fromEntries(
+        ["generation", "audit", "summary"].map((route) => {
+          const routeConfig = modelConfig.routes?.[route];
+          const model = routeConfig?.model?.trim();
+          return [
+            route,
+            model
+              ? {
+                  provider: modelConfig.provider,
+                  base_url: modelConfig.base_url,
+                  model,
+                  max_tokens: modelConfig.max_tokens,
+                }
+              : null,
+          ];
+        }),
+      );
       const updated = await updateModelConfig({
         provider: modelConfig.provider,
         base_url: modelConfig.base_url,
         model: modelConfig.model,
         max_tokens: modelConfig.max_tokens,
         api_key: modelApiKey.trim() || undefined,
+        routes,
       });
       setModelConfig(updated);
       setModelApiKey("");

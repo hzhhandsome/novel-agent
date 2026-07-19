@@ -52,6 +52,26 @@ export function ChapterEditor({
   onReject,
 }: ChapterEditorProps) {
   const candidateContent = liveGeneratedContent || chapter?.generated_content;
+  function routeModel(route: "generation" | "audit" | "summary") {
+    return modelConfig.routes?.[route]?.model ?? "";
+  }
+
+  function updateRouteModel(route: "generation" | "audit" | "summary", model: string) {
+    onModelConfigChange({
+      ...modelConfig,
+      routes: {
+        ...(modelConfig.routes ?? {}),
+        [route]: {
+          provider: modelConfig.provider,
+          base_url: modelConfig.base_url,
+          model,
+          max_tokens: modelConfig.max_tokens,
+          api_key_set: modelConfig.api_key_set,
+          routes: {},
+        },
+      },
+    });
+  }
 
   return (
     <main className="editor" aria-label="正文">
@@ -134,6 +154,36 @@ export function ChapterEditor({
                 />
               </label>
               <span className="model-key-status">{modelConfig.api_key_set ? "密钥已设置" : "未设置密钥"}</span>
+              <label className="compact-text-field route-model-field">
+                <span>生成模型</span>
+                <input
+                  type="text"
+                  value={routeModel("generation")}
+                  onChange={(event) => updateRouteModel("generation", event.target.value)}
+                  disabled={busy}
+                  aria-label="生成模型"
+                />
+              </label>
+              <label className="compact-text-field route-model-field">
+                <span>审核模型</span>
+                <input
+                  type="text"
+                  value={routeModel("audit")}
+                  onChange={(event) => updateRouteModel("audit", event.target.value)}
+                  disabled={busy}
+                  aria-label="审核模型"
+                />
+              </label>
+              <label className="compact-text-field route-model-field">
+                <span>摘要模型</span>
+                <input
+                  type="text"
+                  value={routeModel("summary")}
+                  onChange={(event) => updateRouteModel("summary", event.target.value)}
+                  disabled={busy}
+                  aria-label="摘要模型"
+                />
+              </label>
               <button type="button" className="secondary-button" onClick={onSaveModelConfig} disabled={busy} title="保存模型">
                 <span>保存模型</span>
               </button>

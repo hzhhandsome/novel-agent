@@ -346,6 +346,10 @@ button:disabled {
   width: 96px;
 }
 
+.route-model-field input {
+  width: 118px;
+}
+
 .model-key-status {
   color: #68716a;
   font-size: 12px;
