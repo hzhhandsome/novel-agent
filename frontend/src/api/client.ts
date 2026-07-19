@@ -1,4 +1,13 @@
-import type { AutoGenerationTask, Chapter, GenerationTask, InputReviewResult, Inspiration, ModelConfig, Project } from "../types";
+import type {
+  AutoGenerationTask,
+  BuiltinEvalReport,
+  Chapter,
+  GenerationTask,
+  InputReviewResult,
+  Inspiration,
+  ModelConfig,
+  Project,
+} from "../types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -170,4 +179,8 @@ export function reviewProjectInput(projectId: number, inputKind: string, content
     method: "POST",
     body: JSON.stringify({ input_kind: inputKind, content }),
   });
+}
+
+export function runBuiltinEvals(): Promise<BuiltinEvalReport> {
+  return request<BuiltinEvalReport>("/api/evals/builtin");
 }

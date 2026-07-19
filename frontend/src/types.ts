@@ -115,6 +115,33 @@ export interface InputReviewResult {
   suggestions: string[];
 }
 
+export interface EvalCaseResult {
+  case?: string;
+  case_id?: string;
+  passed: boolean;
+  retained?: string[];
+  missing?: string[];
+  detected?: string[];
+  missed?: string[];
+}
+
+export interface EvalMetricReport {
+  case_count: number;
+  passed_count: number;
+  average_retention_rate?: number;
+  average_recall_rate?: number;
+  cases: EvalCaseResult[];
+}
+
+export interface BuiltinEvalReport {
+  summary: EvalMetricReport;
+  audit: EvalMetricReport;
+  overall: {
+    case_count: number;
+    passed_count: number;
+  };
+}
+
 export interface AutoGenerationCompletedChapter {
   id: number;
   number: number;

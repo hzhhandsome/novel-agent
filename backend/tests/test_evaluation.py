@@ -55,3 +55,13 @@ def test_builtin_eval_runner_returns_aggregate_metrics():
     assert report["audit"]["case_count"] >= 1
     assert report["audit"]["average_recall_rate"] > 0
     assert report["overall"]["case_count"] == report["summary"]["case_count"] + report["audit"]["case_count"]
+
+
+def test_builtin_eval_api_returns_report(client_with_db):
+    response = client_with_db.get("/api/evals/builtin")
+
+    assert response.status_code == 200
+    report = response.json()
+    assert report["summary"]["case_count"] >= 1
+    assert report["audit"]["case_count"] >= 1
+    assert report["overall"]["case_count"] == report["summary"]["case_count"] + report["audit"]["case_count"]

@@ -10,6 +10,7 @@ import {
   reviewProjectIdea,
   reviewProjectInput,
   retryTask,
+  runBuiltinEvals,
   streamAutoGenerateChapters,
   streamGenerateChapter,
   updateChapter,
@@ -19,7 +20,15 @@ import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ChapterEditor } from "./components/ChapterEditor";
 import { ChapterSidebar } from "./components/ChapterSidebar";
 import { ModulePanel } from "./components/ModulePanel";
-import type { AutoGenerationTask, Chapter, GenerationTask, InputReviewResult, ModelConfig, Project } from "./types";
+import type {
+  AutoGenerationTask,
+  BuiltinEvalReport,
+  Chapter,
+  GenerationTask,
+  InputReviewResult,
+  ModelConfig,
+  Project,
+} from "./types";
 import "./styles.css";
 
 function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: number | null): string | null {
@@ -56,7 +65,9 @@ export default function App() {
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
   const [autoTask, setAutoTask] = useState<AutoGenerationTask | null>(null);
+  const [evalReport, setEvalReport] = useState<BuiltinEvalReport | null>(null);
   const [backstageCollapsed, setBackstageCollapsed] = useState(false);
+  const [generationToolbarCollapsed, setGenerationToolbarCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -253,6 +264,13 @@ export default function App() {
     });
   }
 
+  function handleRunEval() {
+    void runBusy(async () => {
+      const report = await runBuiltinEvals();
+      setEvalReport(report);
+    });
+  }
+
   return (
     <div className={backstageCollapsed ? "app-shell backstage-collapsed" : "app-shell"}>
       <ChapterSidebar
@@ -273,6 +291,8 @@ export default function App() {
         idea={idea}
         busy={busy}
         error={error}
+        toolbarCollapsed={generationToolbarCollapsed}
+        onToggleToolbarCollapsed={() => setGenerationToolbarCollapsed((value) => !value)}
         onIdeaChange={setIdea}
         onAutoChapterCountChange={setAutoChapterCount}
         onModelConfigChange={setModelConfig}
@@ -296,10 +316,12 @@ export default function App() {
       <AgentWorkspace
         project={project}
         task={task}
+        evalReport={evalReport}
         busy={busy}
         collapsed={backstageCollapsed}
         onToggleCollapsed={() => setBackstageCollapsed((value) => !value)}
         onRetry={handleRetry}
+        onRunEval={handleRunEval}
       />
     </div>
   );

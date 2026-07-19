@@ -249,6 +249,30 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "开始全自动" })).toBeInTheDocument();
   });
 
+  it("collapses and expands the editor top toolbar", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([makeProject()]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    render(<App />);
+
+    expect(await screen.findByText("全自动")).toBeInTheDocument();
+    expect(screen.getByLabelText("模型供应商")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "收起工具栏" }));
+
+    expect(screen.queryByLabelText("模型供应商")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "开始全自动" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "展开工具栏" })).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: "展开工具栏" }));
+
+    expect(screen.getByLabelText("模型供应商")).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "开始全自动" })).toBeInTheDocument();
+  });
+
   it("updates the runtime model config from the top toolbar", async () => {
     let savedBody = "";
     vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
@@ -370,6 +394,65 @@ describe("App", () => {
     expect(screen.getByText("角色卡变化")).toBeInTheDocument();
     expect(screen.getByText("后续线路变化")).toBeInTheDocument();
     expect(screen.getByText("入库动作")).toBeInTheDocument();
+  });
+
+  it("runs built-in evals from the backstage and shows the report", async () => {
+    vi.spyOn(globalThis, "fetch").mockImplementation((input) => {
+      const url = String(input);
+      if (url === "/api/evals/builtin") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              summary: {
+                case_count: 2,
+                average_retention_rate: 0.75,
+                passed_count: 1,
+                cases: [
+                  {
+                    case: "summary_case_1",
+                    passed: false,
+                    retained: ["废城图书馆"],
+                    missing: ["记忆代价"],
+                  },
+                ],
+              },
+              audit: {
+                case_count: 2,
+                average_recall_rate: 0.5,
+                passed_count: 1,
+                cases: [
+                  {
+                    case: "audit_case_1",
+                    passed: false,
+                    detected: ["人设冲突"],
+                    missed: ["伏笔提前泄露"],
+                  },
+                ],
+              },
+              overall: { case_count: 4, passed_count: 2 },
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([makeProject()]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    render(<App />);
+
+    await screen.findByRole("button", { name: /异常出现/ });
+    fireEvent.click(screen.getByRole("button", { name: "运行 Eval" }));
+
+    expect(await screen.findByText("Eval 评测")).toBeInTheDocument();
+    expect(screen.getByText("通过 2 / 4")).toBeInTheDocument();
+    expect(screen.getByText("摘要事实保留率 75%")).toBeInTheDocument();
+    expect(screen.getByText("审核冲突检出率 50%")).toBeInTheDocument();
+    expect(screen.getByText(/summary_case_1/)).toBeInTheDocument();
+    expect(screen.getByText(/伏笔提前泄露/)).toBeInTheDocument();
   });
 
   it("switches the backstage detail when a flow node is clicked", async () => {
@@ -524,10 +607,12 @@ describe("App", () => {
       <AgentWorkspace
         project={makeProject()}
         task={task}
+        evalReport={null}
         busy={false}
         collapsed={false}
         onToggleCollapsed={() => undefined}
         onRetry={() => undefined}
+        onRunEval={() => undefined}
       />,
     );
 
@@ -868,6 +953,8 @@ describe("ChapterEditor", () => {
         idea=""
         busy={true}
         error={null}
+        toolbarCollapsed={false}
+        onToggleToolbarCollapsed={() => undefined}
         onIdeaChange={() => undefined}
         onAutoChapterCountChange={() => undefined}
         onModelConfigChange={() => undefined}

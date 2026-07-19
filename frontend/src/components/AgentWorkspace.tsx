@@ -1,14 +1,16 @@
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Circle, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
 import { useMemo, useState } from "react";
-import type { GenerationStep, GenerationTask, Project } from "../types";
+import type { BuiltinEvalReport, GenerationStep, GenerationTask, Project } from "../types";
 
 interface AgentWorkspaceProps {
   project: Project | null;
   task: GenerationTask | null;
+  evalReport: BuiltinEvalReport | null;
   busy: boolean;
   collapsed: boolean;
   onToggleCollapsed: () => void;
   onRetry: () => void;
+  onRunEval: () => void;
 }
 
 type WorkspaceTab = "flow" | "context" | "result";
@@ -224,6 +226,22 @@ function stepStatusClass(status: string | undefined): string {
   return "pending";
 }
 
+function formatEvalPercent(value: number | undefined): string {
+  return `${Math.round((value ?? 0) * 100)}%`;
+}
+
+function evalCaseSummary(report: BuiltinEvalReport | null): string {
+  if (!report) return "";
+  const failedCases = [...report.summary.cases, ...report.audit.cases].filter((item) => !item.passed);
+  if (failedCases.length === 0) return "所有内置样例通过";
+  return failedCases
+    .map((item) => {
+      const missed = [...(item.missing ?? []), ...(item.missed ?? [])].join("、") || "无";
+      return `${item.case_id ?? item.case ?? "unknown_case"}：遗漏 ${missed}`;
+    })
+    .join("；");
+}
+
 function StepStatusIcon({ status }: { status: string | undefined }) {
   if (status === "completed") return <CheckCircle2 size={16} aria-hidden="true" />;
   if (status === "running") return <LoaderCircle size={16} aria-hidden="true" />;
@@ -231,7 +249,16 @@ function StepStatusIcon({ status }: { status: string | undefined }) {
   return <Circle size={16} aria-hidden="true" />;
 }
 
-export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollapsed, onRetry }: AgentWorkspaceProps) {
+export function AgentWorkspace({
+  project,
+  task,
+  evalReport,
+  busy,
+  collapsed,
+  onToggleCollapsed,
+  onRetry,
+  onRunEval,
+}: AgentWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("flow");
   const [activeFlow, setActiveFlow] = useState<string>("load_context");
   const failed = task?.status === "failed";
@@ -251,6 +278,11 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
   const futurePlanResult = getNestedRecord(candidateResult, "future_plan");
   const persistenceResult = getOutput(task, "persist_candidate_result").persistence_result;
   const usageSummary = modelUsageSummary(task);
+
+  function handleRunEval() {
+    setActiveTab("result");
+    onRunEval();
+  }
 
   const contextCards = useMemo<Array<[string, string]>>(
     () => [
@@ -324,6 +356,9 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
           {usageSummary ? <span>{usageSummary}</span> : null}
         </div>
         <div className="toolbar-actions">
+          <button className="secondary-button" type="button" onClick={handleRunEval} disabled={busy} title="运行 Eval">
+            <span>运行 Eval</span>
+          </button>
           {failed ? (
             <button className="secondary-button" type="button" onClick={onRetry} disabled={busy} title="重试">
               <RefreshCw size={16} />
@@ -419,6 +454,22 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
 
       {activeTab === "result" ? (
         <div className="result-list">
+          {evalReport ? (
+            <article className="result-card eval-report-card">
+              <header className="eval-report-header">
+                <div>
+                  <strong>Eval 评测</strong>
+                  <span>通过 {evalReport.overall.passed_count} / {evalReport.overall.case_count}</span>
+                </div>
+                <span className="status-pill">内置样例</span>
+              </header>
+              <div className="eval-metric-grid">
+                <span>摘要事实保留率 {formatEvalPercent(evalReport.summary.average_retention_rate)}</span>
+                <span>审核冲突检出率 {formatEvalPercent(evalReport.audit.average_recall_rate)}</span>
+              </div>
+              <p>{evalCaseSummary(evalReport)}</p>
+            </article>
+          ) : null}
           <details className="result-card" open>
             <summary>
               <strong>审核结果</strong>

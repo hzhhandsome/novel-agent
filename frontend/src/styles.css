@@ -304,6 +304,15 @@ button:disabled {
   background: #ffffff;
 }
 
+.top-generation-toolbar.collapsed {
+  padding: 8px 12px;
+}
+
+.toolbar-collapse-button {
+  flex: 0 0 auto;
+  margin-left: auto;
+}
+
 .auto-mode-control span:last-child {
   display: block;
   color: #68716a;
@@ -532,6 +541,43 @@ button:disabled {
 .result-card p {
   margin: 0;
   padding: 0 12px 12px;
+}
+
+.eval-report-card {
+  padding: 12px;
+}
+
+.eval-report-header {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 10px;
+  margin-bottom: 10px;
+}
+
+.eval-report-header strong,
+.eval-report-header span {
+  display: block;
+}
+
+.eval-metric-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(180px, 1fr));
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.eval-metric-grid span {
+  min-height: 32px;
+  padding: 7px 9px;
+  border: 1px solid #3f4a42;
+  border-radius: 8px;
+  background: #242b26;
+  color: #f5f1e8;
+}
+
+.eval-report-card p {
+  padding: 0;
 }
 
 details {

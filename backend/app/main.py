@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.routes import chapters, generation, inspirations, projects
+from app.api.routes import chapters, evals, generation, inspirations, projects
 
 
 def create_app() -> FastAPI:
@@ -14,6 +14,7 @@ def create_app() -> FastAPI:
     app.include_router(chapters.router)
     app.include_router(generation.router)
     app.include_router(inspirations.router)
+    app.include_router(evals.router)
 
     return app
 

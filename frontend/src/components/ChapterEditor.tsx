@@ -1,4 +1,4 @@
-import { Check, Save, X, Zap } from "lucide-react";
+import { Check, ChevronDown, ChevronUp, Save, X, Zap } from "lucide-react";
 import type { AutoGenerationTask, Chapter, InputReviewResult, ModelConfig } from "../types";
 import { ProjectCreator } from "./ProjectCreator";
 
@@ -14,6 +14,8 @@ interface ChapterEditorProps {
   idea: string;
   busy: boolean;
   error: string | null;
+  toolbarCollapsed: boolean;
+  onToggleToolbarCollapsed: () => void;
   onIdeaChange: (value: string) => void;
   onAutoChapterCountChange: (value: string) => void;
   onModelConfigChange: (value: ModelConfig) => void;
@@ -40,6 +42,8 @@ export function ChapterEditor({
   idea,
   busy,
   error,
+  toolbarCollapsed,
+  onToggleToolbarCollapsed,
   onIdeaChange,
   onAutoChapterCountChange,
   onModelConfigChange,
@@ -96,7 +100,7 @@ export function ChapterEditor({
         <ProjectCreator idea={idea} busy={busy} onIdeaChange={onIdeaChange} onCreate={onCreateProject} />
       ) : (
         <>
-          <div className="top-generation-toolbar" aria-label="生成控制">
+          <div className={toolbarCollapsed ? "top-generation-toolbar collapsed" : "top-generation-toolbar"} aria-label="生成控制">
             <div className="auto-mode-control">
               <span className="auto-switch" aria-hidden="true" />
               <div>
@@ -108,6 +112,17 @@ export function ChapterEditor({
                 </span>
               </div>
             </div>
+            <button
+              type="button"
+              className="icon-text-button toolbar-collapse-button"
+              onClick={onToggleToolbarCollapsed}
+              title={toolbarCollapsed ? "展开工具栏" : "收起工具栏"}
+              aria-label={toolbarCollapsed ? "展开工具栏" : "收起工具栏"}
+            >
+              {toolbarCollapsed ? <ChevronDown size={16} /> : <ChevronUp size={16} />}
+              <span>{toolbarCollapsed ? "展开工具栏" : "收起工具栏"}</span>
+            </button>
+            {toolbarCollapsed ? null : (
             <div className="toolbar-actions">
               <label className="compact-select-field">
                 <span>模型供应商</span>
@@ -221,6 +236,7 @@ export function ChapterEditor({
                 <span>生成记录</span>
               </button>
             </div>
+            )}
           </div>
           <div className="editor-toolbar">
             <div>

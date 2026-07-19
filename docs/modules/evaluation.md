@@ -74,3 +74,15 @@ python -m app.evals.run
 - gold case 要保持小而稳定，避免为了让当前模型“好看”而频繁改答案。
 - 新增模型、prompt 或 RAG 策略后，应优先复用同一批 gold case 做对比。
 - 当前是确定性文本匹配，不能声称已经有完整语义评测；语义匹配和 LLM judge 应作为后续增强。
+
+## 前端/API 入口
+
+前端可通过 Agent 创作后台的“运行 Eval”按钮触发内置评测。
+
+后端 API：
+
+```http
+GET /api/evals/builtin
+```
+
+该接口复用 `backend/app/evals/run.py` 的 `run_builtin_evals()`，返回结构与命令行 `python -m app.evals.run` 保持一致。当前接口只读取内置 gold cases，不写数据库。
