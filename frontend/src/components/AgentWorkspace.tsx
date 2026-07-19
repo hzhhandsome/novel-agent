@@ -1,5 +1,5 @@
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Circle, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
-import { useMemo, useState } from "react";
+import { type MouseEvent, type ReactNode, useMemo, useState } from "react";
 import type { BuiltinEvalReport, GenerationStep, GenerationTask, Project } from "../types";
 
 interface AgentWorkspaceProps {
@@ -8,6 +8,7 @@ interface AgentWorkspaceProps {
   evalReport: BuiltinEvalReport | null;
   busy: boolean;
   collapsed: boolean;
+  onResizeStart: (event: MouseEvent<HTMLButtonElement>) => void;
   onToggleCollapsed: () => void;
   onRetry: () => void;
   onRunEval: () => void;
@@ -242,11 +243,101 @@ function evalCaseSummary(report: BuiltinEvalReport | null): string {
     .join("；");
 }
 
+function formatJson(value: unknown): string {
+  return JSON.stringify(value ?? {}, null, 2);
+}
+
+function formatModelUsageFromOutput(output: Record<string, unknown>): string {
+  const usages = Object.entries(output)
+    .filter(([key, value]) => key.endsWith("_model_usage") && value && typeof value === "object" && !Array.isArray(value))
+    .map(([, value]) => value as Record<string, unknown>);
+  if (usages.length === 0) return "";
+
+  const inputTokens = usages.reduce((sum, item) => sum + Number(item.estimated_input_tokens ?? 0), 0);
+  const outputTokens = usages.reduce((sum, item) => sum + Number(item.estimated_output_tokens ?? 0), 0);
+  const durationMs = usages.reduce((sum, item) => sum + Number(item.duration_ms ?? 0), 0);
+  const cost = usages.reduce((sum, item) => sum + Number(item.estimated_cost ?? 0), 0);
+  return `输入 ${inputTokens} / 输出 ${outputTokens} token；成本 ${Number(cost.toFixed(6))}；耗时 ${durationMs}ms`;
+}
+
+function stepSummary(step: GenerationStep | null, node: FlowNode): string {
+  if (!step) return node.summary;
+  if (step.error_message) return step.error_message;
+  if (step.name === "generate_prose") return "正文节点已完成，正文内容显示在中间正文区。";
+  if (step.name === "load_context") return "上下文包已加载，预算和召回信息可在下方查看。";
+  if (step.name === "build_candidate_result") return "候选结果已汇总，摘要、审核、伏笔和角色卡建议进入结果区。";
+  if (step.name === "persist_candidate_result") return "候选结果、节点快照和写入状态已保存。";
+  return node.summary;
+}
+
+function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[string, string]> {
+  if (!step) return node.details;
+
+  const output = step.output_snapshot ?? {};
+  const items: Array<[string, string]> = [["节点状态", stepStatusText(step.status)]];
+  const usageText = formatModelUsageFromOutput(output);
+  if (usageText) items.push(["模型用量", usageText]);
+
+  if (step.name === "load_context") {
+    const contextPackage = getNestedRecord(output, "context_package");
+    const budgetText = formatContextBudget(contextPackage.context_budget);
+    const retrievalText = formatRetrievalResults(contextPackage.retrieval_results);
+    if (budgetText) items.push(["上下文预算", budgetText]);
+    if (retrievalText) items.push(["RAG 召回", retrievalText]);
+  }
+
+  if (step.name === "build_candidate_result") {
+    const candidate = getNestedRecord(output, "candidate_result");
+    const summary = stringifyValue(candidate.summary);
+    if (summary) items.push(["章节摘要", summary]);
+    const audit = stringifyValue(getNestedRecord(candidate, "audit"));
+    if (audit) items.push(["审核结果", audit]);
+  }
+
+  if (step.name === "persist_candidate_result") {
+    const persistence = stringifyValue(output.persistence_result);
+    if (persistence) items.push(["入库动作", persistence]);
+  }
+
+  return items.length > 1 ? items : node.details;
+}
+
 function StepStatusIcon({ status }: { status: string | undefined }) {
   if (status === "completed") return <CheckCircle2 size={16} aria-hidden="true" />;
   if (status === "running") return <LoaderCircle size={16} aria-hidden="true" />;
   if (status === "failed") return <XCircle size={16} aria-hidden="true" />;
   return <Circle size={16} aria-hidden="true" />;
+}
+
+interface ResultCardProps {
+  title: string;
+  summary: string;
+  pill: string;
+  className?: string;
+  pillClassName?: string;
+  children: ReactNode;
+}
+
+function ResultCard({ title, summary, pill, className = "", pillClassName = "", children }: ResultCardProps) {
+  const [open, setOpen] = useState(false);
+  const cardClassName = ["result-card", className].filter(Boolean).join(" ");
+  const pillClasses = ["status-pill", pillClassName].filter(Boolean).join(" ");
+
+  return (
+    <article className={cardClassName}>
+      <button
+        className="result-card-summary"
+        type="button"
+        aria-expanded={open}
+        onClick={() => setOpen((value) => !value)}
+      >
+        <strong>{title}</strong>
+        <span>{summary}</span>
+        <span className={pillClasses}>{pill}</span>
+      </button>
+      {open ? <div className="result-card-body">{children}</div> : null}
+    </article>
+  );
 }
 
 export function AgentWorkspace({
@@ -255,12 +346,14 @@ export function AgentWorkspace({
   evalReport,
   busy,
   collapsed,
+  onResizeStart,
   onToggleCollapsed,
   onRetry,
   onRunEval,
 }: AgentWorkspaceProps) {
   const [activeTab, setActiveTab] = useState<WorkspaceTab>("flow");
   const [activeFlow, setActiveFlow] = useState<string>("load_context");
+  const [rawSnapshotOpen, setRawSnapshotOpen] = useState(false);
   const failed = task?.status === "failed";
   const realSteps = task?.steps ?? [];
   const realStepByName = new Map(realSteps.map((step) => [step.name, step]));
@@ -340,15 +433,26 @@ export function AgentWorkspace({
     };
   });
   const activeTitle = `${activeNode.index}. ${activeNode.label}`;
-  const activeSummary = activeStep
-    ? stringifyValue(activeStep.output_snapshot) || activeStep.error_message || activeStep.status
-    : activeNode.summary;
-  const activeDetails = activeStep
-    ? Object.entries(activeStep.output_snapshot ?? {}).map(([key, value]) => [key, stringifyValue(value)] as [string, string])
-    : activeNode.details;
+  const activeSummary = stepSummary(activeStep, activeNode);
+  const activeDetails = stepHighlights(activeStep, activeNode);
+  const rawSnapshotText = activeStep
+    ? formatJson({
+        input_snapshot: activeStep.input_snapshot,
+        output_snapshot: activeStep.output_snapshot,
+      })
+    : "";
 
   return (
     <section className={collapsed ? "agent-workspace collapsed" : "agent-workspace"} aria-label="Agent 创作后台">
+      {!collapsed ? (
+        <button
+          className="backstage-resize-handle"
+          type="button"
+          aria-label="拖拽调整后台高度"
+          title="拖拽调整后台高度"
+          onMouseDown={onResizeStart}
+        />
+      ) : null}
       <div className="backstage-bar">
         <div>
           <h2>Agent 创作后台</h2>
@@ -419,7 +523,10 @@ export function AgentWorkspace({
                 type="button"
                 className={node.key === activeFlow ? `flow-node active ${node.statusClass}` : `flow-node ${node.statusClass}`}
                 aria-label={`${node.index}. ${node.label} ${node.statusText}`}
-                onClick={() => setActiveFlow(node.key)}
+                onClick={() => {
+                  setActiveFlow(node.key);
+                  setRawSnapshotOpen(false);
+                }}
               >
                 <StepStatusIcon status={node.status} />
                 <strong>{node.index}. {node.label}</strong>
@@ -437,6 +544,19 @@ export function AgentWorkspace({
                 </div>
               ))}
             </div>
+            {activeStep ? (
+              <div className="raw-snapshot-card">
+                <button
+                  type="button"
+                  aria-expanded={rawSnapshotOpen}
+                  onClick={() => setRawSnapshotOpen((value) => !value)}
+                >
+                  <strong>原始输出</strong>
+                  <span>输入/输出快照</span>
+                </button>
+                {rawSnapshotOpen ? <pre>{rawSnapshotText}</pre> : null}
+              </div>
+            ) : null}
           </article>
         </div>
       ) : null}
@@ -470,12 +590,7 @@ export function AgentWorkspace({
               <p>{evalCaseSummary(evalReport)}</p>
             </article>
           ) : null}
-          <details className="result-card" open>
-            <summary>
-              <strong>审核结果</strong>
-              <span>通过</span>
-              <span className="status-pill">无阻塞</span>
-            </summary>
+          <ResultCard title="审核结果" summary="通过" pill="无阻塞">
             <p className={task?.error_message ? "error-line" : undefined}>
               {task?.error_message ? (
                 <>
@@ -486,32 +601,17 @@ export function AgentWorkspace({
                 stringifyValue(auditResult.findings) || "未发现阻塞问题。"
               )}
             </p>
-          </details>
-          <details className="result-card changed">
-            <summary>
-              <strong>章节摘要</strong>
-              <span>将写入</span>
-              <span className="status-pill warn">有变化</span>
-            </summary>
+          </ResultCard>
+          <ResultCard title="章节摘要" summary="将写入" pill="有变化" className="changed" pillClassName="warn">
             <p>{stringifyValue(candidateResult.summary) || currentChapter?.summary || "主角第一次修复红封书，确认现实会随修书改变。"}</p>
-          </details>
-          <details className="result-card changed">
-            <summary>
-              <strong>伏笔变化</strong>
-              <span>新增 / 推进</span>
-              <span className="status-pill warn">有变化</span>
-            </summary>
+          </ResultCard>
+          <ResultCard title="伏笔变化" summary="新增 / 推进" pill="有变化" className="changed" pillClassName="warn">
             <p>
               {stringifyValue(foreshadowingResult) ||
                 joinItems(project?.foreshadowing_items.map((item) => item.content) ?? [], "新增书页批注，推进手背页码。")}
             </p>
-          </details>
-          <details className="result-card changed">
-            <summary>
-              <strong>角色卡变化</strong>
-              <span>更新</span>
-              <span className="status-pill warn">有变化</span>
-            </summary>
+          </ResultCard>
+          <ResultCard title="角色卡变化" summary="更新" pill="有变化" className="changed" pillClassName="warn">
             <p>
               {stringifyValue(characterPeriodResult) ||
                 joinItems(
@@ -519,23 +619,13 @@ export function AgentWorkspace({
                   "更新主角目标和记忆状态。",
                 )}
             </p>
-          </details>
-          <details className="result-card changed">
-            <summary>
-              <strong>后续线路变化</strong>
-              <span>建议调整</span>
-              <span className="status-pill warn">有变化</span>
-            </summary>
+          </ResultCard>
+          <ResultCard title="后续线路变化" summary="建议调整" pill="有变化" className="changed" pillClassName="warn">
             <p>{stringifyValue(futurePlanResult) || "第 4 章标题：规则代价 -> 第一次付出代价。原因：本章已经实际写出第一次明确记忆代价。"}</p>
-          </details>
-          <details className="result-card weak">
-            <summary>
-              <strong>入库动作</strong>
-              <span>已自动写入</span>
-              <span className="status-pill">完成</span>
-            </summary>
+          </ResultCard>
+          <ResultCard title="入库动作" summary="已自动写入" pill="完成" className="weak">
             <p>{stringifyValue(persistenceResult) || "正文、摘要、角色卡更新、伏笔更新和后续线路调整写入正式上下文；生成记录保留。"}</p>
-          </details>
+          </ResultCard>
         </div>
       ) : null}
       </>

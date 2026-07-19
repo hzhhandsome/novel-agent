@@ -1,5 +1,5 @@
 import "@testing-library/jest-dom/vitest";
-import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 import App from "./App";
@@ -394,6 +394,31 @@ describe("App", () => {
     expect(screen.getByText("角色卡变化")).toBeInTheDocument();
     expect(screen.getByText("后续线路变化")).toBeInTheDocument();
     expect(screen.getByText("入库动作")).toBeInTheDocument();
+    const resultList = document.querySelector(".result-list") as HTMLElement;
+    expect(within(resultList).queryByText("主角确认修书会改写现实。")).not.toBeInTheDocument();
+
+    fireEvent.click(screen.getByText("章节摘要"));
+    expect(within(resultList).getByText("主角确认修书会改写现实。")).toBeInTheDocument();
+  });
+
+  it("resizes the backstage by dragging its top edge", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([makeProject()]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    render(<App />);
+
+    const shell = document.querySelector(".app-shell") as HTMLElement;
+    expect(await screen.findByRole("button", { name: /异常出现/ })).toBeInTheDocument();
+    expect(shell.style.getPropertyValue("--backstage-height")).toBe("420px");
+
+    fireEvent.mouseDown(screen.getByLabelText("拖拽调整后台高度"), { clientY: 700 });
+    window.dispatchEvent(new MouseEvent("mousemove", { clientY: 560 }));
+    window.dispatchEvent(new MouseEvent("mouseup"));
+
+    await waitFor(() => expect(shell.style.getPropertyValue("--backstage-height")).toBe("560px"));
   });
 
   it("runs built-in evals from the backstage and shows the report", async () => {
@@ -610,6 +635,7 @@ describe("App", () => {
         evalReport={null}
         busy={false}
         collapsed={false}
+        onResizeStart={() => undefined}
         onToggleCollapsed={() => undefined}
         onRetry={() => undefined}
         onRunEval={() => undefined}
@@ -619,9 +645,15 @@ describe("App", () => {
     const completedNode = screen.getByRole("button", { name: /1.*加载上下文.*完成/ });
     expect(completedNode).toBeInTheDocument();
     expect(completedNode).not.toHaveTextContent("完成");
-    expect(screen.getAllByText(/真实定位/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText("上下文包已加载，预算和召回信息可在下方查看。")).toBeInTheDocument();
     expect(screen.getByText(/估算 token：520/)).toBeInTheDocument();
     expect(screen.getByText(/估算成本：0.5/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /4.*生成章节正文.*完成/ }));
+    expect(screen.getByText("模型用量")).toBeInTheDocument();
+    expect(screen.queryByText(/generate_prose_model_usage/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("原始输出"));
+    expect(screen.getByText(/generate_prose_model_usage/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
     expect(screen.getByText("真实世界观")).toBeInTheDocument();
@@ -634,10 +666,16 @@ describe("App", () => {
     expect(screen.getByText(/RELEVANT_EVENT_MARKER/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "结果与更新" }));
+    expect(screen.queryByText(/真实审核发现/)).not.toBeInTheDocument();
+    fireEvent.click(screen.getByText("审核结果"));
     expect(screen.getByText(/真实审核发现/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("章节摘要"));
     expect(screen.getByText("真实候选摘要")).toBeInTheDocument();
+    fireEvent.click(screen.getByText("伏笔变化"));
     expect(screen.getByText(/真实伏笔推进/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("角色卡变化"));
     expect(screen.getByText(/真实角色更新/)).toBeInTheDocument();
+    fireEvent.click(screen.getByText("后续线路变化"));
     expect(screen.getByText(/真实线路调整/)).toBeInTheDocument();
   });
 

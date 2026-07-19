@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useState } from "react";
+import { type CSSProperties, type MouseEvent, useEffect, useMemo, useState } from "react";
 import {
   acceptChapter,
   addInspiration,
@@ -67,6 +67,7 @@ export default function App() {
   const [autoTask, setAutoTask] = useState<AutoGenerationTask | null>(null);
   const [evalReport, setEvalReport] = useState<BuiltinEvalReport | null>(null);
   const [backstageCollapsed, setBackstageCollapsed] = useState(false);
+  const [backstageHeight, setBackstageHeight] = useState(420);
   const [generationToolbarCollapsed, setGenerationToolbarCollapsed] = useState(false);
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -271,8 +272,34 @@ export default function App() {
     });
   }
 
+  function handleBackstageResizeStart(event: MouseEvent<HTMLButtonElement>) {
+    event.preventDefault();
+    const startY = event.clientY;
+    if (!Number.isFinite(startY)) return;
+    const startHeight = backstageHeight;
+    const maxHeight = Math.max(220, window.innerHeight - 180);
+
+    function handleMouseMove(moveEvent: globalThis.MouseEvent) {
+      if (!Number.isFinite(moveEvent.clientY)) return;
+      const nextHeight = startHeight + startY - moveEvent.clientY;
+      setBackstageHeight(Math.min(maxHeight, Math.max(220, nextHeight)));
+    }
+
+    function handleMouseUp() {
+      window.removeEventListener("mousemove", handleMouseMove);
+      window.removeEventListener("mouseup", handleMouseUp);
+    }
+
+    window.addEventListener("mousemove", handleMouseMove);
+    window.addEventListener("mouseup", handleMouseUp);
+  }
+
+  const shellStyle = {
+    "--backstage-height": backstageCollapsed ? "56px" : `${backstageHeight}px`,
+  } as CSSProperties;
+
   return (
-    <div className={backstageCollapsed ? "app-shell backstage-collapsed" : "app-shell"}>
+    <div className={backstageCollapsed ? "app-shell backstage-collapsed" : "app-shell"} style={shellStyle}>
       <ChapterSidebar
         chapters={project?.chapters ?? []}
         selectedChapterId={selectedChapterId}
@@ -319,6 +346,7 @@ export default function App() {
         evalReport={evalReport}
         busy={busy}
         collapsed={backstageCollapsed}
+        onResizeStart={handleBackstageResizeStart}
         onToggleCollapsed={() => setBackstageCollapsed((value) => !value)}
         onRetry={handleRetry}
         onRunEval={handleRunEval}
