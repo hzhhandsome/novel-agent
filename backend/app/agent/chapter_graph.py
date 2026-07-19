@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import time
 from collections.abc import Callable
 from datetime import datetime
 
@@ -7,10 +8,12 @@ from langgraph.graph import END, StateGraph
 from sqlalchemy.orm import Session
 
 from app.agent.state import ChapterGenerationState
+from app.core.config import settings
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.review import ReviewFinding
 from app.services.model_provider import ModelProvider
+from app.services.model_usage import estimate_model_usage
 from app.services.provider_factory import get_model_provider_from_snapshot
 from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
 
@@ -32,6 +35,7 @@ def build_chapter_generation_graph(
     model_config_snapshot: dict | None = None,
 ):
     workflow = StateGraph(ChapterGenerationState)
+    default_model_config = _route_config_snapshot(model_config_snapshot, "default")
     generation_provider = _provider_for_route(provider, model_config_snapshot, "generation")
     audit_provider = _provider_for_route(provider, model_config_snapshot, "audit")
     summary_provider = _provider_for_route(provider, model_config_snapshot, "summary")
@@ -63,14 +67,17 @@ def build_chapter_generation_graph(
             _summarize_chapter(summary_provider, _route_config_snapshot(model_config_snapshot, "summary")),
         ),
     )
-    workflow.add_node("judge_foreshadowing", _persisted_step(session, "judge_foreshadowing", _judge_foreshadowing(provider)))
+    workflow.add_node(
+        "judge_foreshadowing",
+        _persisted_step(session, "judge_foreshadowing", _judge_foreshadowing(provider, default_model_config)),
+    )
     workflow.add_node(
         "judge_character_period",
-        _persisted_step(session, "judge_character_period", _judge_character_period(provider)),
+        _persisted_step(session, "judge_character_period", _judge_character_period(provider, default_model_config)),
     )
     workflow.add_node(
         "propose_future_plan_updates",
-        _persisted_step(session, "propose_future_plan_updates", _propose_future_plan_updates(provider)),
+        _persisted_step(session, "propose_future_plan_updates", _propose_future_plan_updates(provider, default_model_config)),
     )
     workflow.add_node("build_candidate_result", _persisted_step(session, "build_candidate_result", _build_candidate_result))
     workflow.add_node(
@@ -110,6 +117,30 @@ def _route_config_snapshot(model_config_snapshot: dict | None, route: str) -> di
         for key in ("provider", "base_url", "model", "max_tokens", "api_key_set")
         if key in model_config_snapshot
     }
+
+
+def _duration_ms(started: float) -> int:
+    return max(0, round((time.perf_counter() - started) * 1000))
+
+
+def _usage(
+    node: str,
+    route: str,
+    model_config: dict,
+    input_text: str,
+    output_text: str,
+    duration_ms: int,
+) -> dict:
+    return estimate_model_usage(
+        node=node,
+        route=route,
+        model_config=model_config,
+        input_text=input_text,
+        output_text=output_text,
+        duration_ms=duration_ms,
+        input_cost_per_1k=settings.model_input_cost_per_1k,
+        output_cost_per_1k=settings.model_output_cost_per_1k,
+    )
 
 
 def _persisted_step(session: Session, name: str, fn: NodeFn) -> NodeFn:
@@ -190,6 +221,12 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
             "generation_model_config",
             "audit_model_config",
             "summary_model_config",
+            "generate_prose_model_usage",
+            "audit_prose_model_usage",
+            "summarize_chapter_model_usage",
+            "judge_foreshadowing_model_usage",
+            "judge_character_period_model_usage",
+            "propose_future_plan_updates_model_usage",
             "character_updates",
             "foreshadowing_updates",
             "foreshadowing_decisions",
@@ -508,11 +545,21 @@ def _build_prompt_package(state: ChapterGenerationState) -> ChapterGenerationSta
 
 def _generate_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
+        started = time.perf_counter()
         result = provider.generate_chapter(state["prompt_package"])
+        duration_ms = _duration_ms(started)
         return {
             "generated_content": result.content,
             "draft_summary": result.summary,
             "generation_model_config": model_config,
+            "generate_prose_model_usage": _usage(
+                "generate_prose",
+                "generation",
+                model_config,
+                state["prompt_package"],
+                result.content,
+                duration_ms,
+            ),
             "character_updates": result.character_updates,
             "foreshadowing_updates": result.foreshadowing_updates,
         }
@@ -522,7 +569,10 @@ def _generate_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
 
 def _audit_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
+        input_text = f"{state['prompt_package']}\n{state['generated_content']}"
+        started = time.perf_counter()
         findings = provider.review_chapter(state["generated_content"], state["prompt_package"])
+        duration_ms = _duration_ms(started)
         serialized = [
             {
                 "problem_type": finding.problem_type,
@@ -536,6 +586,14 @@ def _audit_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
             "review_findings": serialized,
             "audit_result": {"findings": serialized, "blocking": any(item["blocking"] for item in serialized)},
             "audit_model_config": model_config,
+            "audit_prose_model_usage": _usage(
+                "audit_prose",
+                "audit",
+                model_config,
+                input_text,
+                str(serialized),
+                duration_ms,
+            ),
         }
 
     return run
@@ -543,27 +601,51 @@ def _audit_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
 
 def _summarize_chapter(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
+        started = time.perf_counter()
         summary = provider.summarize_chapter(state.get("generated_content", ""))
+        duration_ms = _duration_ms(started)
         return {
             "summary": summary,
             "summary_result": {"summary": summary, "source": "post_audit"},
             "summary_model_config": model_config,
+            "summarize_chapter_model_usage": _usage(
+                "summarize_chapter",
+                "summary",
+                model_config,
+                state.get("generated_content", ""),
+                summary,
+                duration_ms,
+            ),
         }
 
     return run
 
 
-def _judge_foreshadowing(provider: ModelProvider) -> NodeFn:
+def _judge_foreshadowing(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         package = state.get("context_package", {})
         existing = [str(item.get("content", "")) for item in package.get("foreshadowing_items", [])]
+        input_text = f"{state.get('context', '')}\n{existing}\n{state.get('generated_content', '')}"
+        started = time.perf_counter()
         decisions = provider.judge_foreshadowing(state.get("generated_content", ""), state.get("context", ""), existing)
-        return {"foreshadowing_decisions": _normalize_decisions(decisions)}
+        duration_ms = _duration_ms(started)
+        normalized = _normalize_decisions(decisions)
+        return {
+            "foreshadowing_decisions": normalized,
+            "judge_foreshadowing_model_usage": _usage(
+                "judge_foreshadowing",
+                "default",
+                model_config,
+                input_text,
+                str(normalized),
+                duration_ms,
+            ),
+        }
 
     return run
 
 
-def _judge_character_period(provider: ModelProvider) -> NodeFn:
+def _judge_character_period(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         package = state.get("context_package", {})
         characters = [
@@ -573,6 +655,8 @@ def _judge_character_period(provider: ModelProvider) -> NodeFn:
             )
             for item in package.get("characters", [])
         ]
+        input_text = f"{state.get('context', '')}\n{characters}\n{state.get('generated_content', '')}"
+        started = time.perf_counter()
         try:
             decisions = provider.judge_character_period(
                 state.get("generated_content", ""),
@@ -589,17 +673,43 @@ def _judge_character_period(provider: ModelProvider) -> NodeFn:
                 "skipped": True,
                 "error": str(exc),
             }
-        return {"character_period_decisions": _normalize_decisions(decisions)}
+        duration_ms = _duration_ms(started)
+        normalized = _normalize_decisions(decisions)
+        return {
+            "character_period_decisions": normalized,
+            "judge_character_period_model_usage": _usage(
+                "judge_character_period",
+                "default",
+                model_config,
+                input_text,
+                str(normalized),
+                duration_ms,
+            ),
+        }
 
     return run
 
 
-def _propose_future_plan_updates(provider: ModelProvider) -> NodeFn:
+def _propose_future_plan_updates(provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         package = state.get("context_package", {})
         chapters = [f"第 {item.get('number')} 章：{item.get('title', '')}" for item in package.get("chapters", [])]
+        input_text = f"{state.get('context', '')}\n{chapters}\n{state.get('generated_content', '')}"
+        started = time.perf_counter()
         updates = provider.propose_future_plan_updates(state.get("generated_content", ""), state.get("context", ""), chapters)
-        return {"future_plan_updates": _normalize_decisions(updates)}
+        duration_ms = _duration_ms(started)
+        normalized = _normalize_decisions(updates)
+        return {
+            "future_plan_updates": normalized,
+            "propose_future_plan_updates_model_usage": _usage(
+                "propose_future_plan_updates",
+                "default",
+                model_config,
+                input_text,
+                str(normalized),
+                duration_ms,
+            ),
+        }
 
     return run
 

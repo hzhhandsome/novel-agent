@@ -194,6 +194,22 @@ function formatRetrievalResults(value: unknown): string {
   return [`backend=${backend}`, query ? `query=${query}` : "", hitText].filter(Boolean).join("；");
 }
 
+function modelUsageSummary(task: GenerationTask | null): string {
+  const calls = (task?.steps ?? []).flatMap((step) =>
+    Object.entries(step.output_snapshot ?? {})
+      .filter(([key, value]) => key.endsWith("_model_usage") && value && typeof value === "object" && !Array.isArray(value))
+      .map(([, value]) => value as Record<string, unknown>),
+  );
+  if (calls.length === 0) return "";
+
+  const inputTokens = calls.reduce((sum, item) => sum + Number(item.estimated_input_tokens ?? 0), 0);
+  const outputTokens = calls.reduce((sum, item) => sum + Number(item.estimated_output_tokens ?? 0), 0);
+  const durationMs = calls.reduce((sum, item) => sum + Number(item.duration_ms ?? 0), 0);
+  const cost = calls.reduce((sum, item) => sum + Number(item.estimated_cost ?? 0), 0);
+  const totalTokens = inputTokens + outputTokens;
+  return `估算 token：${totalTokens}；估算成本：${Number(cost.toFixed(6))}；耗时：${durationMs}ms`;
+}
+
 function stepStatusText(status: string | undefined): string {
   if (status === "completed") return "完成";
   if (status === "running") return "执行中";
@@ -234,6 +250,7 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
   const characterPeriodResult = getNestedRecord(candidateResult, "character_period");
   const futurePlanResult = getNestedRecord(candidateResult, "future_plan");
   const persistenceResult = getOutput(task, "persist_candidate_result").persistence_result;
+  const usageSummary = modelUsageSummary(task);
 
   const contextCards = useMemo<Array<[string, string]>>(
     () => [
@@ -304,6 +321,7 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
         <div>
           <h2>Agent 创作后台</h2>
           <span>{task ? `全自动运行 · ${task.status}` : "等待生成"}</span>
+          {usageSummary ? <span>{usageSummary}</span> : null}
         </div>
         <div className="toolbar-actions">
           {failed ? (

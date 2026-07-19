@@ -10,6 +10,7 @@ from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.memory import StoryEvent, WorldRule
 from app.services.model_provider import ModelProvider
+from app.services.model_usage import aggregate_model_usage
 from app.services.provider_factory import get_model_config_snapshot, get_model_provider_from_snapshot
 
 
@@ -348,6 +349,7 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
 
     prompt_package = None
     review_result = None
+    model_usage_snapshot = aggregate_model_usage([step.output_snapshot for step in task.steps])
     for step in task.steps:
         if step.name == "build_prompt_package" and step.output_snapshot:
             prompt_package = step.output_snapshot.get("prompt_package")
@@ -362,6 +364,7 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
             output_text=chapter.generated_content,
             review_result=review_result,
             model_config_snapshot=task.model_config_snapshot,
+            model_usage_snapshot=model_usage_snapshot,
             accepted=accepted,
         )
     )

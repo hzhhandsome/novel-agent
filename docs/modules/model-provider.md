@@ -76,6 +76,22 @@
 
 API key 仍只保存在运行时内存中，不返回前端，也不写入默认或路由快照。
 
+## 成本和 token 统计
+
+当前第一阶段记录章节生成流程中的模型调用估算数据：
+
+- 覆盖节点：`generate_prose`、`audit_prose`、`summarize_chapter`、`judge_foreshadowing`、`judge_character_period`、`propose_future_plan_updates`。
+- 每个节点输出快照包含 `<node>_model_usage`，记录 route、公开模型配置、估算输入 token、估算输出 token、耗时毫秒和估算成本。
+- `GenerationRun.model_usage_snapshot` 在采纳或拒绝候选时保存本次任务聚合 usage。
+- 前端 Agent 后台展示当前任务估算 token、估算成本和耗时。
+
+估算 token 当前使用确定性字符启发式，不依赖外部 tokenizer。成本单价通过环境变量配置，默认 0：
+
+- `NOVEL_AGENT_MODEL_INPUT_COST_PER_1K`
+- `NOVEL_AGENT_MODEL_OUTPUT_COST_PER_1K`
+
+后续如果 provider 返回真实 usage，应在 provider/usage 层替换估算值，不改变业务层字段形状。
+
 ## 扩展点
 
 后续可添加：
@@ -83,7 +99,7 @@ API key 仍只保存在运行时内存中，不返回前端，也不写入默认
 - 运行时全局模型切换。
 - 项目级模型配置。
 - 节点级模型配置已经覆盖正文生成、审核和摘要三类 P0 路由；更多节点路由可后续扩展。
-- 模型调用成本、耗时和失败原因记录。
+- 模型调用成本和耗时已经支持第一阶段估算记录；真实 provider usage 和更细价格表可后续扩展。
 - 温度、最大 token、超时和重试策略。
 
 LLM 平滑切换第一阶段已经支持全局切换：新任务使用新模型，已开始任务继续使用创建任务时记录的模型配置快照。

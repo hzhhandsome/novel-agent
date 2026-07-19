@@ -386,6 +386,38 @@ describe("App", () => {
           },
         },
         {
+          id: 4,
+          task_id: 7,
+          name: "generate_prose",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            generate_prose_model_usage: {
+              estimated_input_tokens: 120,
+              estimated_output_tokens: 300,
+              duration_ms: 50,
+              estimated_cost: 0.42,
+            },
+          },
+        },
+        {
+          id: 5,
+          task_id: 7,
+          name: "audit_prose",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            audit_prose_model_usage: {
+              estimated_input_tokens: 80,
+              estimated_output_tokens: 20,
+              duration_ms: 20,
+              estimated_cost: 0.08,
+            },
+          },
+        },
+        {
           id: 2,
           task_id: 7,
           name: "build_candidate_result",
@@ -435,6 +467,8 @@ describe("App", () => {
     expect(completedNode).toBeInTheDocument();
     expect(completedNode).not.toHaveTextContent("完成");
     expect(screen.getAllByText(/真实定位/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/估算 token：520/)).toBeInTheDocument();
+    expect(screen.getByText(/估算成本：0.5/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
     expect(screen.getByText("真实世界观")).toBeInTheDocument();

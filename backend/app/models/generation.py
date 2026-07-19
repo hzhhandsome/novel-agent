@@ -80,6 +80,7 @@ class GenerationRun(Base):
     output_text: Mapped[str | None] = mapped_column(Text, nullable=True)
     review_result: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     model_config_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
+    model_usage_snapshot: Mapped[dict | None] = mapped_column(JSON, nullable=True)
     accepted: Mapped[bool | None] = mapped_column(Boolean, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
