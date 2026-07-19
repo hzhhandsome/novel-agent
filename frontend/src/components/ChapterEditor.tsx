@@ -1,5 +1,5 @@
 import { Check, Save, X, Zap } from "lucide-react";
-import type { AutoGenerationTask, Chapter } from "../types";
+import type { AutoGenerationTask, Chapter, ModelConfig } from "../types";
 import { ProjectCreator } from "./ProjectCreator";
 
 interface ChapterEditorProps {
@@ -8,11 +8,16 @@ interface ChapterEditorProps {
   liveGeneratedContent: string | null;
   autoChapterCount: string;
   autoTask: AutoGenerationTask | null;
+  modelConfig: ModelConfig;
+  modelApiKey: string;
   idea: string;
   busy: boolean;
   error: string | null;
   onIdeaChange: (value: string) => void;
   onAutoChapterCountChange: (value: string) => void;
+  onModelConfigChange: (value: ModelConfig) => void;
+  onModelApiKeyChange: (value: string) => void;
+  onSaveModelConfig: () => void;
   onCreateProject: () => void;
   onEditorChange: (value: string) => void;
   onSave: () => void;
@@ -28,11 +33,16 @@ export function ChapterEditor({
   liveGeneratedContent,
   autoChapterCount,
   autoTask,
+  modelConfig,
+  modelApiKey,
   idea,
   busy,
   error,
   onIdeaChange,
   onAutoChapterCountChange,
+  onModelConfigChange,
+  onModelApiKeyChange,
+  onSaveModelConfig,
   onCreateProject,
   onEditorChange,
   onSave,
@@ -67,6 +77,66 @@ export function ChapterEditor({
               </div>
             </div>
             <div className="toolbar-actions">
+              <label className="compact-select-field">
+                <span>模型供应商</span>
+                <select
+                  value={modelConfig.provider}
+                  onChange={(event) => onModelConfigChange({ ...modelConfig, provider: event.target.value })}
+                  disabled={busy}
+                  aria-label="模型供应商"
+                >
+                  <option value="mock">mock</option>
+                  <option value="deepseek">deepseek</option>
+                </select>
+              </label>
+              <label className="compact-text-field">
+                <span>模型 Base URL</span>
+                <input
+                  type="text"
+                  value={modelConfig.base_url}
+                  onChange={(event) => onModelConfigChange({ ...modelConfig, base_url: event.target.value })}
+                  disabled={busy}
+                  aria-label="模型 Base URL"
+                />
+              </label>
+              <label className="compact-text-field">
+                <span>模型名称</span>
+                <input
+                  type="text"
+                  value={modelConfig.model}
+                  onChange={(event) => onModelConfigChange({ ...modelConfig, model: event.target.value })}
+                  disabled={busy}
+                  aria-label="模型名称"
+                />
+              </label>
+              <label className="compact-number-field">
+                <span>模型最大 token</span>
+                <input
+                  type="number"
+                  min="256"
+                  max="32768"
+                  value={modelConfig.max_tokens}
+                  onChange={(event) =>
+                    onModelConfigChange({ ...modelConfig, max_tokens: Number.parseInt(event.target.value, 10) || 4096 })
+                  }
+                  disabled={busy}
+                  aria-label="模型最大 token"
+                />
+              </label>
+              <label className="compact-text-field">
+                <span>模型 API Key</span>
+                <input
+                  type="password"
+                  value={modelApiKey}
+                  onChange={(event) => onModelApiKeyChange(event.target.value)}
+                  disabled={busy}
+                  aria-label="模型 API Key"
+                />
+              </label>
+              <span className="model-key-status">{modelConfig.api_key_set ? "密钥已设置" : "未设置密钥"}</span>
+              <button type="button" className="secondary-button" onClick={onSaveModelConfig} disabled={busy} title="保存模型">
+                <span>保存模型</span>
+              </button>
               <label className="compact-number-field">
                 <span>自动生成章数</span>
                 <input

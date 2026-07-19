@@ -1,4 +1,4 @@
-import type { AutoGenerationTask, Chapter, GenerationTask, Inspiration, Project } from "../types";
+import type { AutoGenerationTask, Chapter, GenerationTask, Inspiration, ModelConfig, Project } from "../types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -138,4 +138,21 @@ export function addInspiration(projectId: number, content: string): Promise<Insp
 
 export function retryTask(taskId: number): Promise<GenerationTask> {
   return request<GenerationTask>(`/api/generation-tasks/${taskId}/retry`, { method: "POST" });
+}
+
+export function getModelConfig(): Promise<ModelConfig> {
+  return request<ModelConfig>("/api/model-config");
+}
+
+export function updateModelConfig(payload: {
+  provider?: string;
+  base_url?: string;
+  model?: string;
+  max_tokens?: number;
+  api_key?: string;
+}): Promise<ModelConfig> {
+  return request<ModelConfig>("/api/model-config", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
 }

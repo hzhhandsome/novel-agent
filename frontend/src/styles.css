@@ -107,6 +107,11 @@ textarea {
   justify-content: space-between;
 }
 
+.toolbar-actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+
 h1,
 h2,
 h3,
@@ -311,7 +316,9 @@ button:disabled {
   color: #9a5b18;
 }
 
-.compact-number-field {
+.compact-number-field,
+.compact-select-field,
+.compact-text-field {
   display: inline-flex;
   align-items: center;
   gap: 6px;
@@ -319,7 +326,9 @@ button:disabled {
   font-size: 12px;
 }
 
-.compact-number-field input {
+.compact-number-field input,
+.compact-select-field select,
+.compact-text-field input {
   width: 64px;
   min-height: 34px;
   border: 1px solid #cfd7ce;
@@ -327,6 +336,20 @@ button:disabled {
   padding: 0 8px;
   color: #202124;
   background: #ffffff;
+}
+
+.compact-text-field input {
+  width: 150px;
+}
+
+.compact-select-field select {
+  width: 96px;
+}
+
+.model-key-status {
+  color: #68716a;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .backstage-bar {

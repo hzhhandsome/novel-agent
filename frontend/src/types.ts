@@ -93,8 +93,17 @@ export interface GenerationTask {
   current_step: string | null;
   error_type: string | null;
   error_message: string | null;
+  model_config_snapshot?: Record<string, unknown> | null;
   chapter: Chapter | null;
   steps: GenerationStep[];
+}
+
+export interface ModelConfig {
+  provider: string;
+  base_url: string;
+  model: string;
+  max_tokens: number;
+  api_key_set: boolean;
 }
 
 export interface AutoGenerationCompletedChapter {
@@ -111,6 +120,7 @@ export interface AutoGenerationTask {
   current_step: string | null;
   error_type: string | null;
   error_message: string | null;
+  model_config_snapshot?: Record<string, unknown> | null;
   target_count: number;
   completed_count: number;
   current_chapter_id: number | null;

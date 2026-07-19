@@ -179,6 +179,62 @@ describe("App", () => {
     expect(screen.getByRole("button", { name: "开始全自动" })).toBeInTheDocument();
   });
 
+  it("updates the runtime model config from the top toolbar", async () => {
+    let savedBody = "";
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = String(input);
+      if (url === "/api/model-config" && init?.method === "PUT") {
+        savedBody = String(init.body);
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              provider: "deepseek",
+              base_url: "https://api.deepseek.com/anthropic",
+              model: "deepseek-v4-flash",
+              max_tokens: 2048,
+              api_key_set: true,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url === "/api/model-config") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              provider: "mock",
+              base_url: "https://api.deepseek.com/anthropic",
+              model: "mock-model",
+              max_tokens: 4096,
+              api_key_set: false,
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([makeProject()]), {
+          status: 200,
+          headers: { "Content-Type": "application/json" },
+        }),
+      );
+    });
+    render(<App />);
+
+    expect(await screen.findByLabelText("模型名称")).toHaveValue("mock-model");
+    fireEvent.change(screen.getByLabelText("模型供应商"), { target: { value: "deepseek" } });
+    fireEvent.change(screen.getByLabelText("模型名称"), { target: { value: "deepseek-v4-flash" } });
+    fireEvent.change(screen.getByLabelText("模型最大 token"), { target: { value: "2048" } });
+    fireEvent.change(screen.getByLabelText("模型 API Key"), { target: { value: "secret-key" } });
+    fireEvent.click(screen.getByRole("button", { name: "保存模型" }));
+
+    await waitFor(() => {
+      expect(savedBody).toContain("deepseek-v4-flash");
+    });
+    expect(savedBody).toContain("secret-key");
+    expect(screen.getByText("密钥已设置")).toBeInTheDocument();
+  });
+
   it("shows backstage flow context and combined result tabs", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify([makeProject()]), {
@@ -657,11 +713,22 @@ describe("ChapterEditor", () => {
         liveGeneratedContent={null}
         autoChapterCount="3"
         autoTask={null}
+        modelConfig={{
+          provider: "mock",
+          base_url: "https://api.deepseek.com/anthropic",
+          model: "mock-model",
+          max_tokens: 4096,
+          api_key_set: false,
+        }}
+        modelApiKey=""
         idea=""
         busy={true}
         error={null}
         onIdeaChange={() => undefined}
         onAutoChapterCountChange={() => undefined}
+        onModelConfigChange={() => undefined}
+        onModelApiKeyChange={() => undefined}
+        onSaveModelConfig={() => undefined}
         onCreateProject={() => undefined}
         onEditorChange={() => undefined}
         onSave={() => undefined}

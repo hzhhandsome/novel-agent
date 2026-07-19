@@ -4,18 +4,20 @@ import {
   addInspiration,
   createProject,
   getProject,
+  getModelConfig,
   listProjects,
   rejectChapter,
   retryTask,
   streamAutoGenerateChapters,
   streamGenerateChapter,
   updateChapter,
+  updateModelConfig,
 } from "./api/client";
 import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ChapterEditor } from "./components/ChapterEditor";
 import { ChapterSidebar } from "./components/ChapterSidebar";
 import { ModulePanel } from "./components/ModulePanel";
-import type { AutoGenerationTask, Chapter, GenerationTask, Project } from "./types";
+import type { AutoGenerationTask, Chapter, GenerationTask, ModelConfig, Project } from "./types";
 import "./styles.css";
 
 function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: number | null): string | null {
@@ -25,11 +27,27 @@ function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: num
   return typeof generated === "string" && generated.trim() ? generated : null;
 }
 
+const defaultModelConfig: ModelConfig = {
+  provider: "mock",
+  base_url: "https://api.deepseek.com/anthropic",
+  model: "deepseek-v4-flash",
+  max_tokens: 4096,
+  api_key_set: false,
+};
+
+function isModelConfig(value: unknown): value is ModelConfig {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return false;
+  const item = value as Record<string, unknown>;
+  return typeof item.provider === "string" && typeof item.base_url === "string" && typeof item.model === "string";
+}
+
 export default function App() {
   const [project, setProject] = useState<Project | null>(null);
   const [selectedChapterId, setSelectedChapterId] = useState<number | null>(null);
   const [editorContent, setEditorContent] = useState("");
   const [autoChapterCount, setAutoChapterCount] = useState("3");
+  const [modelConfig, setModelConfig] = useState<ModelConfig>(defaultModelConfig);
+  const [modelApiKey, setModelApiKey] = useState("");
   const [idea, setIdea] = useState("");
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
@@ -73,6 +91,13 @@ export default function App() {
         loadProject(latest);
       }
     });
+    void getModelConfig()
+      .then((config) => {
+        if (isModelConfig(config)) {
+          setModelConfig(config);
+        }
+      })
+      .catch(() => undefined);
   }, []);
 
   async function refreshProject(
@@ -177,6 +202,20 @@ export default function App() {
     });
   }
 
+  function handleSaveModelConfig() {
+    void runBusy(async () => {
+      const updated = await updateModelConfig({
+        provider: modelConfig.provider,
+        base_url: modelConfig.base_url,
+        model: modelConfig.model,
+        max_tokens: modelConfig.max_tokens,
+        api_key: modelApiKey.trim() || undefined,
+      });
+      setModelConfig(updated);
+      setModelApiKey("");
+    });
+  }
+
   function handleRetry() {
     if (!task) return;
     void runBusy(async () => {
@@ -200,11 +239,16 @@ export default function App() {
         liveGeneratedContent={liveGeneratedContent}
         autoChapterCount={autoChapterCount}
         autoTask={autoTask}
+        modelConfig={modelConfig}
+        modelApiKey={modelApiKey}
         idea={idea}
         busy={busy}
         error={error}
         onIdeaChange={setIdea}
         onAutoChapterCountChange={setAutoChapterCount}
+        onModelConfigChange={setModelConfig}
+        onModelApiKeyChange={setModelApiKey}
+        onSaveModelConfig={handleSaveModelConfig}
         onCreateProject={handleCreateProject}
         onEditorChange={setEditorContent}
         onSave={handleSave}

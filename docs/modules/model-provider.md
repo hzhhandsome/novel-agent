@@ -7,9 +7,10 @@
 ## 入口文件
 
 - `backend/app/services/model_provider.py`：`ModelProvider` 协议、Mock provider、DeepSeek Anthropic-compatible provider。
-- `backend/app/services/provider_factory.py`：根据配置创建当前 provider。
+- `backend/app/services/provider_factory.py`：维护运行时模型配置，根据当前配置或任务快照创建 provider。
 - `backend/app/core/config.py`：模型相关环境变量配置。
 - `.env.example`：模型配置示例，不包含真实密钥。
+- `backend/app/api/routes/generation.py`：`GET/PUT /api/model-config` 运行时模型切换 API。
 
 ## 当前 Provider
 
@@ -48,6 +49,19 @@
 
 返回值必须是结构化 dataclass，业务层不直接解析模型原始响应。
 
+## LLM 平滑切换
+
+当前支持第一阶段全局运行时切换：
+
+- `GET /api/model-config` 返回当前 provider、base URL、model、max tokens 和 `api_key_set`。
+- `PUT /api/model-config` 更新当前后端进程内的全局模型配置。
+- API key 只进入运行时内存，不返回给前端，也不写入任务快照或生成记录。
+- 新建生成任务时，`GenerationTask.model_config_snapshot` 保存 provider、base URL、model、max tokens 和 `api_key_set`。
+- 重试任务时优先使用该任务已有的 `model_config_snapshot`，不受后续全局模型切换影响。
+- `GenerationRun.model_config_snapshot` 保存采纳或拒绝时对应任务的模型配置快照，便于回看。
+
+当前切换配置是进程内状态，重启后回到环境变量配置。项目级模型配置和节点级模型路由属于后续需求。
+
 ## 扩展点
 
 后续可添加：
@@ -58,7 +72,7 @@
 - 模型调用成本、耗时和失败原因记录。
 - 温度、最大 token、超时和重试策略。
 
-LLM 平滑切换第一阶段建议做全局切换：新任务使用新模型，已开始任务继续使用创建任务时记录的模型配置。
+LLM 平滑切换第一阶段已经支持全局切换：新任务使用新模型，已开始任务继续使用创建任务时记录的模型配置快照。
 
 ## 测试方式
 
@@ -80,3 +94,4 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 - 新增 provider 时必须补 provider factory 测试。
 - 新增模型配置时必须更新 `.env.example`，但不能写真实密钥。
 - 如果模型响应结构改变，优先在 provider 层解析和校验，不把不稳定格式泄漏到 LangGraph 节点。
+- 不要把 API key 明文写入 `GenerationTask.model_config_snapshot` 或 `GenerationRun.model_config_snapshot`。

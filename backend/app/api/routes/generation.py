@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_session
 from app.models.chapter import Chapter
 from app.models.generation import GenerationTask
+from app.schemas.generation import ModelConfigRead, ModelConfigUpdate
 from app.services.chapter_service import (
     generate_chapter_candidate,
     get_generation_task,
@@ -16,6 +17,7 @@ from app.services.chapter_service import (
     stream_auto_generate_chapters,
     stream_chapter_generation_candidate,
 )
+from app.services.provider_factory import get_current_model_config, update_runtime_model_config
 
 router = APIRouter(tags=["generation"])
 
@@ -26,6 +28,22 @@ class GenerateChapterRequest(BaseModel):
 
 class AutoGenerateRequest(BaseModel):
     chapter_count: int
+
+
+@router.get("/api/model-config", response_model=ModelConfigRead)
+def read_model_config() -> dict:
+    return get_current_model_config()
+
+
+@router.put("/api/model-config", response_model=ModelConfigRead)
+def update_model_config(payload: ModelConfigUpdate) -> dict:
+    return update_runtime_model_config(
+        provider=payload.provider,
+        base_url=payload.base_url,
+        model=payload.model,
+        max_tokens=payload.max_tokens,
+        api_key=payload.api_key,
+    )
 
 
 @router.post("/api/chapters/{chapter_id}/generate")
@@ -95,6 +113,7 @@ def _task_to_dict(task: GenerationTask) -> dict:
         "current_step": task.current_step,
         "error_type": task.error_type,
         "error_message": task.error_message,
+        "model_config_snapshot": task.model_config_snapshot,
         "chapter": _chapter_to_dict(task.chapter) if task.chapter else None,
         "steps": [
             {

@@ -10,7 +10,7 @@ from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.memory import StoryEvent, WorldRule
 from app.services.model_provider import ModelProvider
-from app.services.provider_factory import get_model_provider
+from app.services.provider_factory import get_model_config_snapshot, get_model_provider_from_snapshot
 
 
 def generate_chapter_candidate(
@@ -21,7 +21,12 @@ def generate_chapter_candidate(
 ) -> GenerationTask:
     chapter = session.get_one(Chapter, chapter_id)
     chapter.status = ChapterStatus.generating
-    task = GenerationTask(project_id=chapter.project_id, chapter_id=chapter.id, kind="chapter_generation")
+    task = GenerationTask(
+        project_id=chapter.project_id,
+        chapter_id=chapter.id,
+        kind="chapter_generation",
+        model_config_snapshot=get_model_config_snapshot(),
+    )
     session.add(task)
     session.commit()
     session.refresh(task)
@@ -32,16 +37,22 @@ def stream_chapter_generation_candidate(
     session: Session,
     chapter_id: int,
     provider: ModelProvider | None = None,
+    model_config_snapshot: dict | None = None,
 ) -> Iterator[GenerationTask]:
     chapter = session.get_one(Chapter, chapter_id)
     chapter.status = ChapterStatus.generating
-    task = GenerationTask(project_id=chapter.project_id, chapter_id=chapter.id, kind="chapter_generation")
+    task = GenerationTask(
+        project_id=chapter.project_id,
+        chapter_id=chapter.id,
+        kind="chapter_generation",
+        model_config_snapshot=model_config_snapshot or get_model_config_snapshot(),
+    )
     session.add(task)
     session.commit()
     session.refresh(task)
     yield get_generation_task(session, task.id)
 
-    graph = build_chapter_generation_graph(session, provider or get_model_provider())
+    graph = build_chapter_generation_graph(session, provider or get_model_provider_from_snapshot(task.model_config_snapshot))
     initial_state = {
         "task_id": task.id,
         "project_id": task.project_id,
@@ -69,8 +80,14 @@ def stream_auto_generate_chapters(
     if chapter_count < 1:
         raise ValueError("chapter_count must be greater than 0")
 
-    model_provider = provider or get_model_provider()
-    auto_task = GenerationTask(project_id=project_id, chapter_id=None, kind="auto_chapter_generation")
+    model_config_snapshot = get_model_config_snapshot()
+    model_provider = provider or get_model_provider_from_snapshot(model_config_snapshot)
+    auto_task = GenerationTask(
+        project_id=project_id,
+        chapter_id=None,
+        kind="auto_chapter_generation",
+        model_config_snapshot=model_config_snapshot,
+    )
     session.add(auto_task)
     session.commit()
     session.refresh(auto_task)
@@ -96,7 +113,12 @@ def stream_auto_generate_chapters(
         session.commit()
         yield _auto_task_to_dict(session, auto_task, chapter_count, completed_chapters, current_child_task)
 
-        for child_task in stream_chapter_generation_candidate(session, chapter.id, provider=model_provider):
+        for child_task in stream_chapter_generation_candidate(
+            session,
+            chapter.id,
+            provider=model_provider,
+            model_config_snapshot=model_config_snapshot,
+        ):
             current_child_task = child_task
             yield _auto_task_to_dict(session, auto_task, chapter_count, completed_chapters, current_child_task)
 
@@ -164,7 +186,12 @@ def retry_generation_task(
     task.error_type = None
     task.error_message = None
     session.commit()
-    return _run_generation_task(session, task.id, fail_at=None, provider=provider)
+    return _run_generation_task(
+        session,
+        task.id,
+        fail_at=None,
+        provider=provider or get_model_provider_from_snapshot(task.model_config_snapshot),
+    )
 
 
 def get_generation_task(session: Session, task_id: int) -> GenerationTask:
@@ -258,6 +285,7 @@ def _auto_task_to_dict(
         "current_step": task.current_step,
         "error_type": task.error_type,
         "error_message": task.error_message,
+        "model_config_snapshot": task.model_config_snapshot,
         "target_count": target_count,
         "completed_count": len(completed_chapters),
         "current_chapter_id": task.chapter_id,
@@ -328,6 +356,7 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
             prompt_package=prompt_package,
             output_text=chapter.generated_content,
             review_result=review_result,
+            model_config_snapshot=task.model_config_snapshot,
             accepted=accepted,
         )
     )
@@ -474,7 +503,10 @@ def _run_generation_task(
     provider: ModelProvider | None,
 ) -> GenerationTask:
     task = get_generation_task(session, task_id)
-    graph = build_chapter_generation_graph(session, provider or get_model_provider())
+    graph = build_chapter_generation_graph(
+        session,
+        provider or get_model_provider_from_snapshot(task.model_config_snapshot),
+    )
     initial_state = {
         "task_id": task.id,
         "project_id": task.project_id,
@@ -501,6 +533,7 @@ def _generation_task_to_dict(task: GenerationTask) -> dict:
         "current_step": task.current_step,
         "error_type": task.error_type,
         "error_message": task.error_message,
+        "model_config_snapshot": task.model_config_snapshot,
         "chapter": _chapter_to_dict(task.chapter) if task.chapter else None,
         "steps": [
             {
