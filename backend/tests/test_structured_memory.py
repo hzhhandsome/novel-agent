@@ -1,3 +1,13 @@
+from app.models.foreshadowing import ForeshadowingItem
+from app.models.generation import GenerationTaskStep
+
+
+def _testing_session(client_with_db):
+    override_session = next(iter(client_with_db.app.dependency_overrides.values()))
+    session_generator = override_session()
+    return session_generator, next(session_generator)
+
+
 def test_project_creation_returns_initial_structured_memory(client_with_db):
     project = client_with_db.post(
         "/api/projects",
@@ -75,3 +85,71 @@ def test_accepting_chapter_commits_foreshadowing_memory(client_with_db):
     assert committed_item["source_chapter_id"] == chapter_id
     assert committed_item["status"] == "planted"
     assert "未提前泄露" in committed_item["notes"]
+
+
+def test_accepting_chapter_normalizes_dict_foreshadowing_items(client_with_db):
+    project = client_with_db.post(
+        "/api/projects",
+        json={"idea": "a city where door numbers count down after midnight"},
+    ).json()
+    chapter_id = project["chapters"][0]["id"]
+
+    client_with_db.post(f"/api/chapters/{chapter_id}/generate")
+    session_generator, session = _testing_session(client_with_db)
+    try:
+        step = (
+            session.query(GenerationTaskStep)
+            .filter(GenerationTaskStep.name == "judge_foreshadowing")
+            .one()
+        )
+        step.output_snapshot = {
+            "foreshadowing_decisions": {
+                "new": [{"content": "door-number-countdown", "reason": "later reveal"}],
+                "advanced": [],
+                "resolved": [],
+                "leaked": [],
+                "notes": "safe to keep",
+            }
+        }
+        session.commit()
+    finally:
+        session_generator.close()
+
+    accepted = client_with_db.post(f"/api/chapters/{chapter_id}/accept")
+
+    assert accepted.status_code == 200
+    refreshed = client_with_db.get(f"/api/projects/{project['id']}").json()
+    assert [item["content"] for item in refreshed["foreshadowing_items"]] == ["door-number-countdown"]
+    assert refreshed["foreshadowing_items"][0]["notes"] == "safe to keep"
+
+
+def test_backfill_project_foreshadowing_replays_accepted_task_snapshots(client_with_db):
+    project = client_with_db.post(
+        "/api/projects",
+        json={"idea": "a train station where old tickets predict tomorrow"},
+    ).json()
+    chapter_id = project["chapters"][0]["id"]
+
+    client_with_db.post(f"/api/chapters/{chapter_id}/generate")
+    client_with_db.post(f"/api/chapters/{chapter_id}/accept")
+
+    session_generator, session = _testing_session(client_with_db)
+    try:
+        session.query(ForeshadowingItem).filter(ForeshadowingItem.project_id == project["id"]).delete()
+        session.commit()
+    finally:
+        session_generator.close()
+
+    response = client_with_db.post(f"/api/projects/{project['id']}/memory/backfill")
+
+    assert response.status_code == 200
+    assert response.json()["foreshadowing_items"] > 0
+    refreshed = client_with_db.get(f"/api/projects/{project['id']}").json()
+    first_count = len(refreshed["foreshadowing_items"])
+    assert first_count > 0
+
+    second_response = client_with_db.post(f"/api/projects/{project['id']}/memory/backfill")
+
+    assert second_response.status_code == 200
+    refreshed_again = client_with_db.get(f"/api/projects/{project['id']}").json()
+    assert len(refreshed_again["foreshadowing_items"]) == first_count

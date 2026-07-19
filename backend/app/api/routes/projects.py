@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session
 from app.db.session import get_session
 from app.repositories.projects import get_project, list_projects
 from app.schemas.project import ProjectCreate, ProjectRead
+from app.services.chapter_service import backfill_project_foreshadowing_memory
 from app.services.input_review import review_project_idea, review_project_input
 from app.services.project_service import create_project_from_idea
 
@@ -44,3 +45,8 @@ def read_projects(session: Session = Depends(get_session)) -> list[ProjectRead]:
 @router.get("/{project_id}", response_model=ProjectRead)
 def read_project(project_id: int, session: Session = Depends(get_session)) -> ProjectRead:
     return ProjectRead.model_validate(get_project(session, project_id))
+
+
+@router.post("/{project_id}/memory/backfill")
+def backfill_project_memory(project_id: int, session: Session = Depends(get_session)) -> dict:
+    return backfill_project_foreshadowing_memory(session, project_id)

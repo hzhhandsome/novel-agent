@@ -439,12 +439,37 @@ def _commit_world_rule(session: Session, chapter: Chapter) -> None:
     )
 
 
-def _commit_foreshadowing_items(session: Session, chapter: Chapter, task: GenerationTask) -> None:
+def backfill_project_foreshadowing_memory(session: Session, project_id: int) -> dict:
+    chapters = (
+        session.query(Chapter)
+        .filter(Chapter.project_id == project_id, Chapter.status == ChapterStatus.accepted)
+        .order_by(Chapter.number.asc(), Chapter.id.asc())
+        .all()
+    )
+    committed = 0
+    checked = 0
+    for chapter in chapters:
+        task = _get_latest_chapter_generation_task(session, chapter.id)
+        if task is None:
+            continue
+        checked += 1
+        committed += _commit_foreshadowing_items(session, chapter, task)
+
+    session.commit()
+    return {
+        "project_id": project_id,
+        "accepted_chapters_checked": checked,
+        "foreshadowing_items": committed,
+    }
+
+
+def _commit_foreshadowing_items(session: Session, chapter: Chapter, task: GenerationTask) -> int:
     decisions = _step_output(task, "judge_foreshadowing").get("foreshadowing_decisions", {})
     if not decisions:
-        return
+        return 0
 
     notes = decisions.get("notes")
+    committed = 0
     status_by_key = {
         "new": ForeshadowingStatus.planted,
         "advanced": ForeshadowingStatus.advanced,
@@ -456,15 +481,16 @@ def _commit_foreshadowing_items(session: Session, chapter: Chapter, task: Genera
                 session.query(ForeshadowingItem)
                 .filter(
                     ForeshadowingItem.project_id == chapter.project_id,
-                    ForeshadowingItem.source_chapter_id == chapter.id,
                     ForeshadowingItem.content == content,
                 )
-                .one_or_none()
+                .order_by(ForeshadowingItem.id.asc())
+                .first()
             )
             if existing is not None:
                 existing.status = status
                 if notes:
                     existing.notes = str(notes)
+                committed += 1
                 continue
 
             session.add(
@@ -476,6 +502,8 @@ def _commit_foreshadowing_items(session: Session, chapter: Chapter, task: Genera
                     notes=str(notes) if notes else None,
                 )
             )
+            committed += 1
+    return committed
 
 
 def _commit_character_periods(session: Session, chapter: Chapter, task: GenerationTask) -> None:
@@ -541,8 +569,25 @@ def _string_items(value) -> list[str]:
     if not value:
         return []
     if isinstance(value, list):
-        return [str(item) for item in value if str(item).strip()]
-    return [str(value)]
+        return [item for item in (_string_item(item) for item in value) if item]
+    item = _string_item(value)
+    return [item] if item else []
+
+
+def _string_item(value) -> str:
+    if isinstance(value, dict):
+        for key in ("content", "伏笔", "foreshadowing", "description", "text", "summary"):
+            candidate = value.get(key)
+            if candidate is not None and str(candidate).strip():
+                return str(candidate).strip()
+        parts = [str(item).strip() for item in value.values() if item is not None and str(item).strip()]
+        return "；".join(parts)
+    if value is None:
+        return ""
+    text = str(value).strip()
+    if text in {"[]", "{}", "None", "null"}:
+        return ""
+    return text
 
 
 def _run_generation_task(
