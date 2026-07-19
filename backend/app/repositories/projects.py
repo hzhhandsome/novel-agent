@@ -5,6 +5,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.models.chapter import Chapter
 from app.models.character import Character
+from app.models.memory import WorldRule
 from app.models.project import Project
 
 
@@ -66,6 +67,20 @@ def create_project_with_seed(session: Session, idea: str, setup_result: ProjectS
                 key_memories=character_seed.key_memories,
                 relationships=character_seed.relationships,
                 writing_notes=character_seed.writing_notes,
+                period_stage="初始时期",
+                period_summary=character_seed.current_goal,
+            )
+        )
+
+    if project.worldview:
+        session.add(
+            WorldRule(
+                project_id=project.id,
+                source_chapter_id=None,
+                rule=project.worldview,
+                limitation="项目创建时生成的基础世界观规则，后续章节必须遵守。",
+                exception=None,
+                status="active",
             )
         )
 
@@ -82,6 +97,8 @@ def get_project(session: Session, project_id: int) -> Project:
             selectinload(Project.characters),
             selectinload(Project.foreshadowing_items),
             selectinload(Project.inspirations),
+            selectinload(Project.story_events),
+            selectinload(Project.world_rules),
         )
     )
     project = session.scalars(statement).one()

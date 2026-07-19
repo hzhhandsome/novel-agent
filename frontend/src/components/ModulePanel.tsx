@@ -38,7 +38,35 @@ export function ModulePanel({
             <article className="module-row" key={character.id}>
               <strong>{character.name}</strong>
               <span>{character.role}</span>
+              <span>{character.period_stage ?? "未标注时期"}</span>
               <p>{character.current_goal}</p>
+              {character.period_summary ? <p>{character.period_summary}</p> : null}
+            </article>
+          ))}
+        </div>
+      </details>
+      <details open>
+        <summary>事件时间线</summary>
+        <div className="stack">
+          {project?.story_events.map((item) => (
+            <article className="module-row" key={item.id}>
+              <strong>{item.title}</strong>
+              <span>{item.characters}</span>
+              <p>{item.summary}</p>
+              {item.consequence ? <p>{item.consequence}</p> : null}
+            </article>
+          ))}
+        </div>
+      </details>
+      <details open>
+        <summary>世界观规则</summary>
+        <div className="stack">
+          {project?.world_rules.map((item) => (
+            <article className="module-row" key={item.id}>
+              <strong>{item.rule}</strong>
+              <span>{item.status}</span>
+              {item.limitation ? <p>{item.limitation}</p> : null}
+              {item.exception ? <p>{item.exception}</p> : null}
             </article>
           ))}
         </div>

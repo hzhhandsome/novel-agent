@@ -200,7 +200,22 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
       [
         "当前角色时期卡",
         stringifyValue(contextPackage.characters) ||
-          joinItems(project?.characters.map((item) => `${item.name}：${item.current_goal ?? "暂无目标"}`) ?? []),
+          joinItems(
+            project?.characters.map(
+              (item) =>
+                `${item.name}：${item.period_stage ?? "未标注时期"}；${item.period_summary ?? item.current_goal ?? "暂无目标"}`,
+            ) ?? [],
+          ),
+      ],
+      [
+        "事件时间线",
+        stringifyValue(contextPackage.story_events) ||
+          joinItems(project?.story_events.map((item) => `${item.title}：${item.summary}`) ?? []),
+      ],
+      [
+        "世界观规则",
+        stringifyValue(contextPackage.world_rules) ||
+          joinItems(project?.world_rules.map((item) => `${item.rule}；${item.limitation ?? ""}`) ?? []),
       ],
       [
         "已采纳章节摘要",

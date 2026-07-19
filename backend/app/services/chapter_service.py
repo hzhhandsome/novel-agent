@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session, selectinload
 from app.agent.chapter_graph import build_chapter_generation_graph
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
+from app.models.memory import StoryEvent, WorldRule
 from app.services.model_provider import ModelProvider
 from app.services.provider_factory import get_model_provider
 
@@ -285,6 +286,7 @@ def accept_chapter_candidate(session: Session, chapter_id: int) -> Chapter:
     chapter.content = chapter.generated_content
     chapter.status = ChapterStatus.accepted
     _record_generation_run(session, chapter_id, accepted=True)
+    _commit_structured_memory(session, chapter_id)
     session.commit()
     session.refresh(chapter)
     return chapter
@@ -329,6 +331,140 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
             accepted=accepted,
         )
     )
+
+
+def _commit_structured_memory(session: Session, chapter_id: int) -> None:
+    chapter = session.get_one(Chapter, chapter_id)
+    task = _get_latest_chapter_generation_task(session, chapter_id)
+    if task is None:
+        return
+
+    _commit_story_event(session, chapter)
+    _commit_world_rule(session, chapter)
+    _commit_character_periods(session, chapter, task)
+
+
+def _get_latest_chapter_generation_task(session: Session, chapter_id: int) -> GenerationTask | None:
+    statement = (
+        select(GenerationTask)
+        .where(GenerationTask.chapter_id == chapter_id, GenerationTask.kind == "chapter_generation")
+        .options(selectinload(GenerationTask.steps), selectinload(GenerationTask.project))
+        .order_by(GenerationTask.id.desc())
+    )
+    return session.scalars(statement).first()
+
+
+def _commit_story_event(session: Session, chapter: Chapter) -> None:
+    existing = (
+        session.query(StoryEvent)
+        .filter(StoryEvent.project_id == chapter.project_id, StoryEvent.source_chapter_id == chapter.id)
+        .one_or_none()
+    )
+    summary = chapter.summary or chapter.generated_content or chapter.content or ""
+    if existing or not summary:
+        return
+
+    character_names = "、".join(character.name for character in chapter.project.characters)
+    session.add(
+        StoryEvent(
+            project_id=chapter.project_id,
+            source_chapter_id=chapter.id,
+            title=f"第 {chapter.number} 章：{chapter.title}",
+            summary=summary,
+            characters=character_names or None,
+            location=None,
+            consequence="已采纳章节形成的正式剧情事实。",
+        )
+    )
+
+
+def _commit_world_rule(session: Session, chapter: Chapter) -> None:
+    existing = (
+        session.query(WorldRule)
+        .filter(WorldRule.project_id == chapter.project_id, WorldRule.source_chapter_id == chapter.id)
+        .one_or_none()
+    )
+    summary = chapter.summary or ""
+    if existing or not summary:
+        return
+
+    session.add(
+        WorldRule(
+            project_id=chapter.project_id,
+            source_chapter_id=chapter.id,
+            rule=summary,
+            limitation="采纳章节提取的正式世界观或剧情约束，后续生成需要保持一致。",
+            exception=None,
+            status="active",
+        )
+    )
+
+
+def _commit_character_periods(session: Session, chapter: Chapter, task: GenerationTask) -> None:
+    decisions = _step_output(task, "judge_character_period").get("character_period_decisions", {})
+    if not decisions:
+        return
+
+    period_cards = decisions.get("new_period_cards") or []
+    if isinstance(period_cards, list):
+        for card in period_cards:
+            if isinstance(card, dict):
+                _apply_character_period_card(chapter, card)
+
+    text_updates = _string_items(decisions.get("updates"))
+    text_updates.extend(_string_items(decisions.get("memory_changes")))
+    text_updates.extend(_string_items(decisions.get("relationship_changes")))
+    if not text_updates and not decisions.get("stage_changed"):
+        return
+
+    target = chapter.project.characters[0] if chapter.project.characters else None
+    if target is None:
+        return
+
+    target.period_summary = "；".join(text_updates) if text_updates else target.period_summary
+    target.period_source_chapter_id = chapter.id
+    if decisions.get("stage_changed") and not target.period_stage:
+        target.period_stage = "新阶段"
+
+
+def _apply_character_period_card(chapter: Chapter, card: dict) -> None:
+    name = str(card.get("character") or card.get("name") or "")
+    target = next((character for character in chapter.project.characters if character.name == name), None)
+    if target is None:
+        return
+
+    stage = card.get("stage") or card.get("period_stage") or card.get("stage_name")
+    summary = card.get("summary") or card.get("period_summary")
+    current_goal = card.get("current_goal")
+    key_memories = card.get("key_memories") or card.get("memory")
+    relationships = card.get("relationships") or card.get("relationship_changes")
+
+    if stage:
+        target.period_stage = str(stage)
+    if summary:
+        target.period_summary = str(summary)
+    if current_goal:
+        target.current_goal = str(current_goal)
+    if key_memories:
+        target.key_memories = str(key_memories)
+    if relationships:
+        target.relationships = str(relationships)
+    target.period_source_chapter_id = chapter.id
+
+
+def _step_output(task: GenerationTask, name: str) -> dict:
+    for step in task.steps:
+        if step.name == name and step.output_snapshot:
+            return step.output_snapshot
+    return {}
+
+
+def _string_items(value) -> list[str]:
+    if not value:
+        return []
+    if isinstance(value, list):
+        return [str(item) for item in value if str(item).strip()]
+    return [str(value)]
 
 
 def _run_generation_task(

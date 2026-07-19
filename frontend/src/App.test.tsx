@@ -36,6 +36,9 @@ function makeProject() {
         key_memories: "遗忘母亲声音",
         relationships: null,
         writing_notes: null,
+        period_stage: "失忆追索期",
+        period_summary: "刚确认修书会改变现实，目标从旁观转为主动追查。",
+        period_source_chapter_id: 100,
       },
     ],
     foreshadowing_items: [
@@ -47,6 +50,29 @@ function makeProject() {
       },
     ],
     inspirations: [{ id: 1, content: "后续出现一本会写出未来的书", applied: false }],
+    story_events: [
+      {
+        id: 1,
+        project_id: 42,
+        source_chapter_id: 100,
+        title: "第 1 章：异常出现",
+        summary: "修书人确认修书会改变现实。",
+        characters: "修书人",
+        location: "废城图书馆",
+        consequence: "修书代价进入正式时间线。",
+      },
+    ],
+    world_rules: [
+      {
+        id: 1,
+        project_id: 42,
+        source_chapter_id: null,
+        rule: "修补书页会改写现实。",
+        limitation: "每次修补都会丢失一段记忆。",
+        exception: null,
+        status: "active",
+      },
+    ],
   };
 }
 
@@ -291,6 +317,27 @@ describe("App", () => {
     expect(screen.getByText(/真实伏笔推进/)).toBeInTheDocument();
     expect(screen.getByText(/真实角色更新/)).toBeInTheDocument();
     expect(screen.getByText(/真实线路调整/)).toBeInTheDocument();
+  });
+
+  it("shows structured memory in the module panel and backstage context", async () => {
+    vi.spyOn(globalThis, "fetch").mockResolvedValue(
+      new Response(JSON.stringify([makeProject()]), {
+        status: 200,
+        headers: { "Content-Type": "application/json" },
+      }),
+    );
+    render(<App />);
+
+    expect(await screen.findByText("失忆追索期")).toBeInTheDocument();
+    expect(screen.getByText("事件时间线")).toBeInTheDocument();
+    expect(screen.getByText("修书人确认修书会改变现实。")).toBeInTheDocument();
+    expect(screen.getByText("世界观规则")).toBeInTheDocument();
+    expect(screen.getByText("修补书页会改写现实。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
+    expect(screen.getAllByText(/失忆追索期/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/修书人确认修书会改变现实/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getAllByText(/修补书页会改写现实/).length).toBeGreaterThanOrEqual(1);
   });
 
   it("collapses and expands the backstage", async () => {

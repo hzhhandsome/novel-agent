@@ -20,12 +20,36 @@ export interface Character {
   key_memories: string | null;
   relationships: string | null;
   writing_notes: string | null;
+  period_stage: string | null;
+  period_summary: string | null;
+  period_source_chapter_id: number | null;
 }
 
 export interface Inspiration {
   id: number;
   content: string;
   applied: boolean;
+}
+
+export interface StoryEvent {
+  id: number;
+  project_id: number;
+  source_chapter_id: number | null;
+  title: string;
+  summary: string;
+  characters: string | null;
+  location: string | null;
+  consequence: string | null;
+}
+
+export interface WorldRule {
+  id: number;
+  project_id: number;
+  source_chapter_id: number | null;
+  rule: string;
+  limitation: string | null;
+  exception: string | null;
+  status: string;
 }
 
 export interface ForeshadowingItem {
@@ -46,6 +70,8 @@ export interface Project {
   characters: Character[];
   foreshadowing_items: ForeshadowingItem[];
   inspirations: Inspiration[];
+  story_events: StoryEvent[];
+  world_rules: WorldRule[];
 }
 
 export interface GenerationStep {

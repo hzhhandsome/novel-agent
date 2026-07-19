@@ -152,6 +152,10 @@ def _load_context(session: Session) -> NodeFn:
                 "role": item.role,
                 "current_goal": item.current_goal,
                 "key_memories": item.key_memories,
+                "relationships": item.relationships,
+                "period_stage": item.period_stage,
+                "period_summary": item.period_summary,
+                "period_source_chapter_id": item.period_source_chapter_id,
             }
             for item in project.characters
         ]
@@ -164,12 +168,35 @@ def _load_context(session: Session) -> NodeFn:
             for item in project.foreshadowing_items
         ]
         chapters = [{"number": item.number, "title": item.title, "summary": item.summary} for item in project.chapters]
+        story_events = [
+            {
+                "title": item.title,
+                "summary": item.summary,
+                "characters": item.characters,
+                "location": item.location,
+                "consequence": item.consequence,
+                "source_chapter_id": item.source_chapter_id,
+            }
+            for item in project.story_events
+        ]
+        world_rules = [
+            {
+                "rule": item.rule,
+                "limitation": item.limitation,
+                "exception": item.exception,
+                "status": item.status,
+                "source_chapter_id": item.source_chapter_id,
+            }
+            for item in project.world_rules
+        ]
         context = "\n".join(
             [
                 f"小说定位：{project.positioning or ''}",
                 f"世界观：{project.worldview or ''}",
                 f"主线：{project.main_plot or ''}",
                 f"角色卡：{characters}",
+                f"事件时间线：{story_events}",
+                f"世界观规则表：{world_rules}",
                 f"伏笔：{foreshadowing_items}",
                 f"前文摘要：{'；'.join(summaries)}",
                 f"作者灵感：{'；'.join(inspirations)}",
@@ -183,6 +210,8 @@ def _load_context(session: Session) -> NodeFn:
                 "main_plot": project.main_plot,
                 "characters": characters,
                 "foreshadowing_items": foreshadowing_items,
+                "story_events": story_events,
+                "world_rules": world_rules,
                 "chapter_summaries": summaries,
                 "inspirations": inspirations,
                 "chapters": chapters,
@@ -265,7 +294,11 @@ def _judge_character_period(provider: ModelProvider) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         package = state.get("context_package", {})
         characters = [
-            f"{item.get('name', '')}：{item.get('current_goal', '')}" for item in package.get("characters", [])
+            (
+                f"{item.get('name', '')}：阶段={item.get('period_stage') or '未标注'}；"
+                f"目标={item.get('current_goal', '')}；时期摘要={item.get('period_summary') or ''}"
+            )
+            for item in package.get("characters", [])
         ]
         try:
             decisions = provider.judge_character_period(

@@ -8,6 +8,7 @@
 | --- | --- | --- | --- |
 | 章节生成流程 | `docs/modules/generation-flow.md` | `backend/app/agent/chapter_graph.py` | 改 LangGraph 节点、生成任务、审核、摘要、中断恢复 |
 | 模型提供器 | `docs/modules/model-provider.md` | `backend/app/services/model_provider.py` | 改 LLM 接入、模型切换、模型配置、模型调用记录 |
+| 结构化记忆 | `docs/modules/memory-system.md` | `backend/app/models/memory.py` | 改角色时期、事件时间线、世界观规则、正式记忆写入或上下文记忆加载 |
 
 ## 文档粒度
 

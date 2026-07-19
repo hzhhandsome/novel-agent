@@ -20,6 +20,9 @@ class Character(Base):
     key_memories: Mapped[str | None] = mapped_column(Text, nullable=True)
     relationships: Mapped[str | None] = mapped_column(Text, nullable=True)
     writing_notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_stage: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    period_summary: Mapped[str | None] = mapped_column(Text, nullable=True)
+    period_source_chapter_id: Mapped[int | None] = mapped_column(ForeignKey("chapters.id"), nullable=True, index=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
     updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 

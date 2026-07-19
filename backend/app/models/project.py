@@ -25,3 +25,5 @@ class Project(Base):
     foreshadowing_items = relationship("ForeshadowingItem", back_populates="project", cascade="all, delete-orphan")
     inspirations = relationship("Inspiration", back_populates="project", cascade="all, delete-orphan")
     generation_tasks = relationship("GenerationTask", back_populates="project", cascade="all, delete-orphan")
+    story_events = relationship("StoryEvent", back_populates="project", cascade="all, delete-orphan")
+    world_rules = relationship("WorldRule", back_populates="project", cascade="all, delete-orphan")
