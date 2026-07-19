@@ -251,8 +251,27 @@ describe("App", () => {
               main_plot: "真实主线",
               characters: [{ name: "真实角色", current_goal: "真实目标" }],
               foreshadowing_items: [{ content: "真实伏笔" }],
+              story_events: [{ title: "真实事件", summary: "真实事件摘要" }],
+              world_rules: [{ rule: "真实规则", limitation: "真实限制" }],
               chapter_summaries: ["真实摘要"],
               inspirations: ["真实灵感"],
+              context_budget: {
+                total_budget: 6000,
+                used: 4200,
+                sections: [
+                  {
+                    name: "chapter_summaries",
+                    budget: 1600,
+                    used: 1200,
+                    included_count: 3,
+                    omitted_count: 7,
+                  },
+                ],
+                omitted: {
+                  chapter_summaries: ["被裁剪的旧摘要"],
+                  story_events: ["被裁剪的旧事件"],
+                },
+              },
             },
           },
         },
@@ -310,6 +329,9 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
     expect(screen.getByText("真实世界观")).toBeInTheDocument();
     expect(screen.getByText("真实伏笔")).toBeInTheDocument();
+    expect(screen.getByText(/4200 \/ 6000/)).toBeInTheDocument();
+    expect(screen.getByText(/chapter_summaries/)).toBeInTheDocument();
+    expect(screen.getByText(/被裁剪的旧摘要/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "结果与更新" }));
     expect(screen.getByText(/真实审核发现/)).toBeInTheDocument();

@@ -152,6 +152,28 @@ function getNestedRecord(source: Record<string, unknown>, key: string): Record<s
   return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
 }
 
+function formatContextBudget(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const budget = value as Record<string, unknown>;
+  const used = stringifyValue(budget.used) || "0";
+  const total = stringifyValue(budget.total_budget) || "0";
+  const sections = Array.isArray(budget.sections) ? budget.sections : [];
+  const sectionText = sections
+    .map((section) => {
+      if (!section || typeof section !== "object" || Array.isArray(section)) return "";
+      const item = section as Record<string, unknown>;
+      return `${stringifyValue(item.name)}：${stringifyValue(item.included_count)} 入选 / ${stringifyValue(item.omitted_count)} 裁剪`;
+    })
+    .filter(Boolean)
+    .join("；");
+  const omitted = getNestedRecord(budget, "omitted");
+  const omittedText = Object.entries(omitted)
+    .map(([name, items]) => `${name}：${stringifyValue(items)}`)
+    .filter((item) => item.trim() !== "")
+    .join("；");
+  return [`${used} / ${total}`, sectionText, omittedText].filter(Boolean).join("；");
+}
+
 function stepStatusText(status: string | undefined): string {
   if (status === "completed") return "完成";
   if (status === "running") return "执行中";
@@ -184,6 +206,7 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
   const currentChapter = task?.chapter ?? project?.chapters[0] ?? null;
   const loadContextOutput = getOutput(task, "load_context");
   const contextPackage = getNestedRecord(loadContextOutput, "context_package");
+  const contextBudgetText = formatContextBudget(contextPackage.context_budget);
   const candidateResult = getCandidateResult(task);
   const auditResult = getNestedRecord(candidateResult, "audit");
   const foreshadowingResult = getNestedRecord(candidateResult, "foreshadowing");
@@ -230,9 +253,10 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
           joinItems(project?.foreshadowing_items.map((item) => item.content) ?? []),
       ],
       ["作者灵感", stringifyValue(contextPackage.inspirations) || joinItems(project?.inspirations.map((item) => item.content) ?? [])],
+      ["上下文预算", contextBudgetText || "尚未生成预算报告。"],
       ["压缩状态", "旧章节正文达到阈值后压缩为摘要；关键设定、角色变化和伏笔保留。"],
     ],
-    [contextPackage, project],
+    [contextBudgetText, contextPackage, project],
   );
   const flowDisplayItems = flowNodes.map((node) => {
     const step = realStepByName.get(node.key);

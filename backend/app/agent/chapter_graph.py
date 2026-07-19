@@ -14,6 +14,15 @@ from app.services.model_provider import ModelProvider
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
 
+TOTAL_CONTEXT_BUDGET = 6000
+SECTION_BUDGETS = {
+    "chapter_summaries": 1600,
+    "story_events": 1200,
+    "inspirations": 800,
+    "foreshadowing_items": 1200,
+    "world_rules": 1200,
+}
+
 
 def build_chapter_generation_graph(session: Session, provider: ModelProvider):
     workflow = StateGraph(ChapterGenerationState)
@@ -144,8 +153,12 @@ def _load_context(session: Session) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         chapter = session.get_one(Chapter, state["chapter_id"])
         project = chapter.project
-        summaries = [item.summary for item in project.chapters if item.summary]
-        inspirations = [item.content for item in project.inspirations if not item.applied]
+        summary_items = [
+            f"第 {item.number} 章：{item.summary}"
+            for item in sorted(project.chapters, key=lambda chapter_item: chapter_item.number, reverse=True)
+            if item.summary
+        ]
+        inspirations = [item.content for item in reversed(project.inspirations) if not item.applied]
         characters = [
             {
                 "name": item.name,
@@ -159,7 +172,7 @@ def _load_context(session: Session) -> NodeFn:
             }
             for item in project.characters
         ]
-        foreshadowing_items = [
+        foreshadowing_candidates = [
             {
                 "content": item.content,
                 "status": item.status.value if hasattr(item.status, "value") else str(item.status),
@@ -168,7 +181,7 @@ def _load_context(session: Session) -> NodeFn:
             for item in project.foreshadowing_items
         ]
         chapters = [{"number": item.number, "title": item.title, "summary": item.summary} for item in project.chapters]
-        story_events = [
+        story_event_candidates = [
             {
                 "title": item.title,
                 "summary": item.summary,
@@ -177,9 +190,9 @@ def _load_context(session: Session) -> NodeFn:
                 "consequence": item.consequence,
                 "source_chapter_id": item.source_chapter_id,
             }
-            for item in project.story_events
+            for item in sorted(project.story_events, key=lambda event: event.id, reverse=True)
         ]
-        world_rules = [
+        world_rule_candidates = [
             {
                 "rule": item.rule,
                 "limitation": item.limitation,
@@ -187,8 +200,22 @@ def _load_context(session: Session) -> NodeFn:
                 "status": item.status,
                 "source_chapter_id": item.source_chapter_id,
             }
-            for item in project.world_rules
+            for item in sorted(project.world_rules, key=lambda rule: rule.id, reverse=True)
         ]
+        budgeted = _build_context_budget(
+            {
+                "foreshadowing_items": foreshadowing_candidates,
+                "world_rules": world_rule_candidates,
+                "chapter_summaries": summary_items,
+                "story_events": story_event_candidates,
+                "inspirations": inspirations,
+            }
+        )
+        foreshadowing_items = budgeted["included"]["foreshadowing_items"]
+        world_rules = budgeted["included"]["world_rules"]
+        summaries = budgeted["included"]["chapter_summaries"]
+        story_events = budgeted["included"]["story_events"]
+        included_inspirations = budgeted["included"]["inspirations"]
         context = "\n".join(
             [
                 f"小说定位：{project.positioning or ''}",
@@ -199,7 +226,7 @@ def _load_context(session: Session) -> NodeFn:
                 f"世界观规则表：{world_rules}",
                 f"伏笔：{foreshadowing_items}",
                 f"前文摘要：{'；'.join(summaries)}",
-                f"作者灵感：{'；'.join(inspirations)}",
+                f"作者灵感：{'；'.join(included_inspirations)}",
             ]
         )
         return {
@@ -213,12 +240,76 @@ def _load_context(session: Session) -> NodeFn:
                 "story_events": story_events,
                 "world_rules": world_rules,
                 "chapter_summaries": summaries,
-                "inspirations": inspirations,
+                "inspirations": included_inspirations,
                 "chapters": chapters,
+                "context_budget": budgeted["report"],
             },
         }
 
     return run
+
+
+def _build_context_budget(candidates: dict[str, list]) -> dict:
+    included: dict[str, list] = {}
+    omitted: dict[str, list[str]] = {}
+    sections: list[dict] = []
+    total_used = 0
+
+    for name, items in candidates.items():
+        budget = SECTION_BUDGETS.get(name, 1000)
+        kept, skipped, used = _fit_items(items, budget)
+        included[name] = kept
+        omitted[name] = skipped
+        total_used += used
+        sections.append(
+            {
+                "name": name,
+                "budget": budget,
+                "used": used,
+                "included_count": len(kept),
+                "omitted_count": len(skipped),
+            }
+        )
+
+    return {
+        "included": included,
+        "report": {
+            "total_budget": TOTAL_CONTEXT_BUDGET,
+            "used": min(total_used, TOTAL_CONTEXT_BUDGET),
+            "sections": sections,
+            "omitted": omitted,
+        },
+    }
+
+
+def _fit_items(items: list, budget: int) -> tuple[list, list[str], int]:
+    kept = []
+    skipped: list[str] = []
+    used = 0
+
+    for item in items:
+        size = _rough_context_size(item)
+        if used + size <= budget or not kept:
+            kept.append(item)
+            used += size
+        else:
+            skipped.append(_compact_omitted_item(item))
+
+    return kept, skipped, used
+
+
+def _rough_context_size(value) -> int:
+    if isinstance(value, dict):
+        return len("；".join(str(item) for item in value.values() if item is not None))
+    return len(str(value))
+
+
+def _compact_omitted_item(value) -> str:
+    if isinstance(value, dict):
+        text = value.get("summary") or value.get("rule") or value.get("content") or value.get("title") or str(value)
+    else:
+        text = str(value)
+    return text[:120]
 
 
 def _build_chapter_target(state: ChapterGenerationState) -> ChapterGenerationState:

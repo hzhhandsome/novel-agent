@@ -26,7 +26,7 @@
 
 1. 创建项目时，为角色初始化 `period_stage="初始时期"`，并用角色当前目标作为初始时期摘要。
 2. 创建项目时，把项目世界观写入基础 `WorldRule`。
-3. 生成章节时，`load_context` 加载角色时期、事件时间线和世界观规则。
+3. 生成章节时，`load_context` 加载角色时期、事件时间线和世界观规则；实际进入 prompt 的事件和规则由上下文预算管理裁剪。
 4. `persist_candidate_result` 仍然只保存候选正文、候选摘要、审核发现和任务快照。
 5. 用户采纳或全自动采纳章节时，`accept_chapter_candidate` 写入正式记忆：
    - 根据章节摘要创建 `StoryEvent`。
@@ -89,5 +89,5 @@ python -m pytest backend/tests/test_chapter_generation.py backend/tests/test_aut
 
 - 正式记忆只能通过采纳路径写入，不能在候选保存节点直接写入。
 - 新增记忆实体时，必须同步项目 API schema、前端类型和后台上下文展示。
-- `load_context` 应读取结构化记忆，但后续要交给上下文预算管理决定实际进入 prompt 的内容。
+- `load_context` 应读取结构化记忆，但必须交给上下文预算管理决定实际进入 prompt 的事件、规则等可变内容。
 - 事件和规则当前是第一阶段基础实现，后续接 RAG 前需要补检索字段和评测样例。
