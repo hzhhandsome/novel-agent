@@ -107,6 +107,14 @@ export interface ModelConfig {
   routes?: Record<string, ModelConfig>;
 }
 
+export interface InputReviewResult {
+  project_id: number | null;
+  input_kind: string;
+  decision: "pass" | "warning" | "block";
+  reason: string;
+  suggestions: string[];
+}
+
 export interface AutoGenerationCompletedChapter {
   id: number;
   number: number;

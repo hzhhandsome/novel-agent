@@ -1,5 +1,5 @@
 import { Check, Save, X, Zap } from "lucide-react";
-import type { AutoGenerationTask, Chapter, ModelConfig } from "../types";
+import type { AutoGenerationTask, Chapter, InputReviewResult, ModelConfig } from "../types";
 import { ProjectCreator } from "./ProjectCreator";
 
 interface ChapterEditorProps {
@@ -10,6 +10,7 @@ interface ChapterEditorProps {
   autoTask: AutoGenerationTask | null;
   modelConfig: ModelConfig;
   modelApiKey: string;
+  inputReview: InputReviewResult | null;
   idea: string;
   busy: boolean;
   error: string | null;
@@ -35,6 +36,7 @@ export function ChapterEditor({
   autoTask,
   modelConfig,
   modelApiKey,
+  inputReview,
   idea,
   busy,
   error,
@@ -73,11 +75,21 @@ export function ChapterEditor({
     });
   }
 
+  const reviewLabel =
+    inputReview?.decision === "block" ? "阻止" : inputReview?.decision === "warning" ? "警告" : inputReview ? "通过" : "";
+
   return (
     <main className="editor" aria-label="正文">
       {error ? (
         <div className="app-alert" role="alert">
           {error}
+        </div>
+      ) : null}
+      {inputReview ? (
+        <div className={`input-review ${inputReview.decision}`}>
+          <strong>输入评判：{reviewLabel}</strong>
+          <p>{inputReview.reason}</p>
+          {inputReview.suggestions.length ? <p>{inputReview.suggestions.join("；")}</p> : null}
         </div>
       ) : null}
       {!chapter ? (

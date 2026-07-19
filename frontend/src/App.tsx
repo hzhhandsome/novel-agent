@@ -7,6 +7,8 @@ import {
   getModelConfig,
   listProjects,
   rejectChapter,
+  reviewProjectIdea,
+  reviewProjectInput,
   retryTask,
   streamAutoGenerateChapters,
   streamGenerateChapter,
@@ -17,7 +19,7 @@ import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ChapterEditor } from "./components/ChapterEditor";
 import { ChapterSidebar } from "./components/ChapterSidebar";
 import { ModulePanel } from "./components/ModulePanel";
-import type { AutoGenerationTask, Chapter, GenerationTask, ModelConfig, Project } from "./types";
+import type { AutoGenerationTask, Chapter, GenerationTask, InputReviewResult, ModelConfig, Project } from "./types";
 import "./styles.css";
 
 function getGeneratedContentFromTask(task: GenerationTask | null, chapterId: number | null): string | null {
@@ -49,6 +51,7 @@ export default function App() {
   const [autoChapterCount, setAutoChapterCount] = useState("3");
   const [modelConfig, setModelConfig] = useState<ModelConfig>(defaultModelConfig);
   const [modelApiKey, setModelApiKey] = useState("");
+  const [inputReview, setInputReview] = useState<InputReviewResult | null>(null);
   const [idea, setIdea] = useState("");
   const [inspirationText, setInspirationText] = useState("");
   const [task, setTask] = useState<GenerationTask | null>(null);
@@ -131,6 +134,9 @@ export default function App() {
 
   function handleCreateProject() {
     void runBusy(async () => {
+      const review = await reviewProjectIdea(idea.trim());
+      setInputReview(review);
+      if (review.decision === "block") return;
       const created = await createProject({ idea });
       loadProject(created);
     });
@@ -197,6 +203,9 @@ export default function App() {
   function handleAddInspiration() {
     if (!project || !inspirationText.trim()) return;
     void runBusy(async () => {
+      const review = await reviewProjectInput(project.id, "inspiration", inspirationText.trim());
+      setInputReview(review);
+      if (review.decision === "block") return;
       await addInspiration(project.id, inspirationText.trim());
       setInspirationText("");
       await refreshProject(project.id);
@@ -260,6 +269,7 @@ export default function App() {
         autoTask={autoTask}
         modelConfig={modelConfig}
         modelApiKey={modelApiKey}
+        inputReview={inputReview}
         idea={idea}
         busy={busy}
         error={error}

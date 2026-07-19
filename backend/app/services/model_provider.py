@@ -56,6 +56,13 @@ class ChapterGenerationResult:
     foreshadowing_updates: list[str]
 
 
+@dataclass(frozen=True)
+class UserInputReviewResult:
+    decision: str
+    reason: str
+    suggestions: list[str]
+
+
 class ModelProvider(Protocol):
     def generate_project_setup(self, idea: str) -> ProjectSetupResult:
         raise NotImplementedError
@@ -76,6 +83,9 @@ class ModelProvider(Protocol):
         raise NotImplementedError
 
     def propose_future_plan_updates(self, content: str, context: str, chapters: list[str]) -> dict[str, Any]:
+        raise NotImplementedError
+
+    def review_user_input(self, input_kind: str, content: str, context: str) -> UserInputReviewResult:
         raise NotImplementedError
 
 
@@ -202,6 +212,26 @@ class DeepSeekAnthropicProvider:
                 "JSON 字段必须包含 suggestions 数组和 notes。"
                 f"\n上下文：{context}\n后续章节：{chapters}\n章节正文：{content}"
             ),
+        )
+
+    def review_user_input(self, input_kind: str, content: str, context: str) -> UserInputReviewResult:
+        payload = self._call_json(
+            system="你是小说创作输入审核助手。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "判断用户输入是否适合进入小说项目上下文。"
+                "JSON 字段必须包含 decision, reason, suggestions。"
+                "decision 只能是 pass, warning, block。"
+                "重点检查：世界观冲突、人设动机破坏、前文摘要矛盾、伏笔提前泄露、过于模糊。"
+                f"\n输入类型：{input_kind}\n项目上下文：{context}\n用户输入：{content}"
+            ),
+        )
+        decision = str(payload.get("decision", "warning"))
+        if decision not in {"pass", "warning", "block"}:
+            decision = "warning"
+        return UserInputReviewResult(
+            decision=decision,
+            reason=str(payload.get("reason", "")),
+            suggestions=[str(item) for item in payload.get("suggestions", [])],
         )
 
     def _call_json(self, system: str, user: str) -> dict[str, Any]:
@@ -348,3 +378,29 @@ class MockModelProvider:
             ],
             "notes": "本章已经完成初始异常确认，后续应承接代价验证。",
         }
+
+    def review_user_input(self, input_kind: str, content: str, context: str) -> UserInputReviewResult:
+        text = content.strip()
+        if len(text) < 8:
+            return UserInputReviewResult(
+                decision="block",
+                reason="输入过于模糊，无法稳定指导后续生成。",
+                suggestions=["补充主角、核心异常、冲突目标或故事约束。"],
+            )
+        if any(marker in text for marker in ("提前泄露", "所有伏笔", "直接解释真相")):
+            return UserInputReviewResult(
+                decision="block",
+                reason="输入可能提前泄露伏笔或一次性解释关键真相。",
+                suggestions=["改成只推进一个线索，保留真相揭示节奏。"],
+            )
+        if len(text) < 20:
+            return UserInputReviewResult(
+                decision="warning",
+                reason="输入可用，但信息较少，后续生成可控性有限。",
+                suggestions=["增加具体场景、人物选择或限制条件。"],
+            )
+        return UserInputReviewResult(
+            decision="pass",
+            reason="输入与当前创作方向兼容，可以进入后续上下文。",
+            suggestions=[],
+        )

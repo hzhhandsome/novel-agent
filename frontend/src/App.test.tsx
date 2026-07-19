@@ -166,6 +166,74 @@ describe("App", () => {
     });
   });
 
+  it("blocks project creation when input review rejects the idea", async () => {
+    let createCalled = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = String(input);
+      if (url === "/api/projects/input-review") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              input_kind: "project_idea",
+              decision: "block",
+              reason: "输入过于模糊，无法稳定指导后续生成。",
+              suggestions: ["补充主角和核心冲突。"],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url === "/api/projects" && init?.method === "POST") {
+        createCalled = true;
+      }
+      return Promise.resolve(new Response("[]", { status: 200, headers: { "Content-Type": "application/json" } }));
+    });
+    render(<App />);
+
+    fireEvent.change(screen.getByLabelText("小说想法"), { target: { value: "爽文" } });
+    fireEvent.click(await screen.findByRole("button", { name: "生成项目" }));
+
+    expect(await screen.findByText(/输入评判：阻止/)).toBeInTheDocument();
+    expect(screen.getByText(/输入过于模糊/)).toBeInTheDocument();
+    expect(createCalled).toBe(false);
+  });
+
+  it("blocks adding inspiration when input review rejects it", async () => {
+    let addCalled = false;
+    vi.spyOn(globalThis, "fetch").mockImplementation((input, init) => {
+      const url = String(input);
+      if (url === "/api/projects/42/input-review") {
+        return Promise.resolve(
+          new Response(
+            JSON.stringify({
+              project_id: 42,
+              input_kind: "inspiration",
+              decision: "block",
+              reason: "输入可能提前泄露伏笔。",
+              suggestions: ["只推进一个线索。"],
+            }),
+            { status: 200, headers: { "Content-Type": "application/json" } },
+          ),
+        );
+      }
+      if (url === "/api/projects/42/inspirations" && init?.method === "POST") {
+        addCalled = true;
+      }
+      return Promise.resolve(
+        new Response(JSON.stringify([makeProject()]), { status: 200, headers: { "Content-Type": "application/json" } }),
+      );
+    });
+    render(<App />);
+
+    await screen.findByRole("button", { name: /异常出现/ });
+    fireEvent.change(screen.getByLabelText("作者灵感输入"), { target: { value: "提前泄露所有伏笔" } });
+    fireEvent.click(screen.getByRole("button", { name: "加入" }));
+
+    expect(await screen.findByText(/输入评判：阻止/)).toBeInTheDocument();
+    expect(screen.getByText(/提前泄露伏笔/)).toBeInTheDocument();
+    expect(addCalled).toBe(false);
+  });
+
   it("places auto mode controls in the editor top toolbar", async () => {
     vi.spyOn(globalThis, "fetch").mockResolvedValue(
       new Response(JSON.stringify([makeProject()]), {
@@ -796,6 +864,7 @@ describe("ChapterEditor", () => {
           api_key_set: false,
         }}
         modelApiKey=""
+        inputReview={null}
         idea=""
         busy={true}
         error={null}

@@ -239,6 +239,37 @@ button:disabled {
   line-height: 1.5;
 }
 
+.input-review {
+  max-width: 720px;
+  margin-bottom: 12px;
+  padding: 10px 12px;
+  border: 1px solid #d8ddd3;
+  border-radius: 8px;
+  background: #ffffff;
+  color: #202124;
+  line-height: 1.5;
+}
+
+.input-review p {
+  margin: 4px 0 0;
+  color: #68716a;
+}
+
+.input-review.block {
+  border-color: #e2b4b4;
+  background: #fff7f7;
+}
+
+.input-review.warning {
+  border-color: #ecd6a8;
+  background: #fff9ea;
+}
+
+.input-review.pass {
+  border-color: #bad8ca;
+  background: #eef8f3;
+}
+
 .project-creator textarea,
 .chapter-textarea,
 .inspiration-input {

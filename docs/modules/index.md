@@ -11,6 +11,7 @@
 | 结构化记忆 | `docs/modules/memory-system.md` | `backend/app/models/memory.py` | 改角色时期、事件时间线、世界观规则、正式记忆写入或上下文记忆加载 |
 | 检索召回 | `docs/modules/retrieval.md` | `backend/app/services/vector_memory.py` | 改 RAG、向量库、embedding、检索来源、召回结果和上下文预算接入 |
 | 评测 | `docs/modules/evaluation.md` | `backend/app/services/evaluation.py` | 改摘要事实保留率、审核冲突检出率、gold case、评测 runner |
+| 作者交互 | `docs/modules/author-interaction.md` | `backend/app/services/input_review.py` | 改用户输入评判、作者灵感写入前检查、正文修改前检查 |
 
 ## 文档粒度
 

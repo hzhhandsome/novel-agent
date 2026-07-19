@@ -1,4 +1,4 @@
-import type { AutoGenerationTask, Chapter, GenerationTask, Inspiration, ModelConfig, Project } from "../types";
+import type { AutoGenerationTask, Chapter, GenerationTask, InputReviewResult, Inspiration, ModelConfig, Project } from "../types";
 
 async function request<T>(path: string, init?: RequestInit): Promise<T> {
   const response = await fetch(path, {
@@ -155,5 +155,19 @@ export function updateModelConfig(payload: {
   return request<ModelConfig>("/api/model-config", {
     method: "PUT",
     body: JSON.stringify(payload),
+  });
+}
+
+export function reviewProjectIdea(content: string): Promise<InputReviewResult> {
+  return request<InputReviewResult>("/api/projects/input-review", {
+    method: "POST",
+    body: JSON.stringify({ input_kind: "project_idea", content }),
+  });
+}
+
+export function reviewProjectInput(projectId: number, inputKind: string, content: string): Promise<InputReviewResult> {
+  return request<InputReviewResult>(`/api/projects/${projectId}/input-review`, {
+    method: "POST",
+    body: JSON.stringify({ input_kind: inputKind, content }),
   });
 }
