@@ -8,6 +8,13 @@ class Settings(BaseSettings):
     model_api_key: str = ""
     model_name: str = "deepseek-v4-flash"
     model_max_tokens: int = 4096
+    retrieval_backend: str = "local"
+    retrieval_top_k: int = 8
+    qdrant_url: str = "http://localhost:6333"
+    qdrant_collection: str = "novel_agent_memory"
+    embedding_provider: str = "hash"
+    embedding_model: str = "BAAI/bge-small-zh-v1.5"
+    embedding_dimension: int = 384
 
     model_config = SettingsConfigDict(
         env_file="../.env",

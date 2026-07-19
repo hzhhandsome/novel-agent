@@ -7,7 +7,8 @@
 - 前端：React + Vite + TypeScript
 - 后端：FastAPI + SQLAlchemy + Alembic
 - Agent 编排：LangGraph
-- 中间件：PostgreSQL
+- 中间件：PostgreSQL、Qdrant
+- RAG：Qdrant 向量库 + 本地 sentence-transformers embedding
 - 默认运行环境：Docker Compose
 
 ## Docker 启动
@@ -21,10 +22,11 @@ docker compose up --build
 - 前端：`http://localhost:5173`
 - 后端：`http://localhost:8000`
 - PostgreSQL：`localhost:55432`
+- Qdrant：`http://localhost:6333`
 
 后端容器启动时会先执行 `alembic upgrade head`，再启动 FastAPI。
 
-如果 Docker Hub 暂时无法拉取 Python/Node 基础镜像，可以先使用本地开发脚本。它仍然会用 Docker 启动 PostgreSQL 中间件：
+如果 Docker Hub 暂时无法拉取 Python/Node 基础镜像，可以先使用本地开发脚本。它仍然会用 Docker 启动 PostgreSQL 和 Qdrant 中间件：
 
 ```powershell
 .\scripts\start-dev.ps1
@@ -56,7 +58,7 @@ docker compose run --rm frontend npm run build
 后端：
 
 ```powershell
-docker compose up -d postgres
+docker compose up -d postgres qdrant
 cd backend
 python -m venv .venv
 .\.venv\Scripts\Activate.ps1
@@ -64,6 +66,8 @@ pip install -e ".[dev]"
 alembic upgrade head
 uvicorn app.main:app --reload
 ```
+
+本地开发默认使用轻量 hash embedding；Docker Compose 后端默认使用 `BAAI/bge-small-zh-v1.5` 本地 embedding 模型，并把正式记忆写入 Qdrant。首次启动需要下载模型，耗时取决于网络和机器性能。
 
 前端：
 
@@ -101,4 +105,5 @@ npm run build
 - 模拟节点失败后，可从已保存任务重试。
 - 作者可采纳或拒绝候选章节。
 - 作者可追加灵感，后续生成会读取未应用灵感。
+- 章节生成前会通过 RAG 召回相关旧摘要、事件、规则、角色卡和伏笔，再交给上下文预算器裁剪。
 - 前端提供四区工作台：章节、正文、模块、Agent 创作后台。

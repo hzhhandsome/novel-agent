@@ -11,6 +11,7 @@ from app.models.chapter import Chapter, ChapterStatus
 from app.models.generation import GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.review import ReviewFinding
 from app.services.model_provider import ModelProvider
+from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
 
@@ -153,11 +154,12 @@ def _load_context(session: Session) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         chapter = session.get_one(Chapter, state["chapter_id"])
         project = chapter.project
-        summary_items = [
-            f"第 {item.number} 章：{item.summary}"
+        accepted_chapters = [
+            item
             for item in sorted(project.chapters, key=lambda chapter_item: chapter_item.number, reverse=True)
-            if item.summary
+            if item.summary and item.status == ChapterStatus.accepted
         ]
+        summary_items = [f"第 {item.number} 章：{item.summary}" for item in accepted_chapters]
         inspirations = [item.content for item in reversed(project.inspirations) if not item.applied]
         characters = [
             {
@@ -174,6 +176,7 @@ def _load_context(session: Session) -> NodeFn:
         ]
         foreshadowing_candidates = [
             {
+                "id": item.id,
                 "content": item.content,
                 "status": item.status.value if hasattr(item.status, "value") else str(item.status),
                 "notes": item.notes,
@@ -183,6 +186,7 @@ def _load_context(session: Session) -> NodeFn:
         chapters = [{"number": item.number, "title": item.title, "summary": item.summary} for item in project.chapters]
         story_event_candidates = [
             {
+                "id": item.id,
                 "title": item.title,
                 "summary": item.summary,
                 "characters": item.characters,
@@ -194,6 +198,7 @@ def _load_context(session: Session) -> NodeFn:
         ]
         world_rule_candidates = [
             {
+                "id": item.id,
                 "rule": item.rule,
                 "limitation": item.limitation,
                 "exception": item.exception,
@@ -202,15 +207,25 @@ def _load_context(session: Session) -> NodeFn:
             }
             for item in sorted(project.world_rules, key=lambda rule: rule.id, reverse=True)
         ]
-        budgeted = _build_context_budget(
-            {
-                "foreshadowing_items": foreshadowing_candidates,
-                "world_rules": world_rule_candidates,
-                "chapter_summaries": summary_items,
-                "story_events": story_event_candidates,
-                "inspirations": inspirations,
-            }
+        retrieval_query = _build_retrieval_query(project, chapter, characters, inspirations)
+        retrieval_documents = _build_vector_memory_documents(
+            project_id=project.id,
+            chapters=accepted_chapters,
+            characters=characters,
+            foreshadowing_items=foreshadowing_candidates,
+            world_rules=world_rule_candidates,
+            story_events=story_event_candidates,
         )
+        candidates = {
+            "foreshadowing_items": foreshadowing_candidates,
+            "world_rules": world_rule_candidates,
+            "chapter_summaries": summary_items,
+            "story_events": story_event_candidates,
+            "inspirations": inspirations,
+        }
+        retrieval_results = _retrieve_context(project.id, retrieval_query, retrieval_documents)
+        ranked_candidates = _rank_candidates_by_retrieval(candidates, retrieval_results.get("hits", []))
+        budgeted = _build_context_budget(ranked_candidates)
         foreshadowing_items = budgeted["included"]["foreshadowing_items"]
         world_rules = budgeted["included"]["world_rules"]
         summaries = budgeted["included"]["chapter_summaries"]
@@ -242,11 +257,124 @@ def _load_context(session: Session) -> NodeFn:
                 "chapter_summaries": summaries,
                 "inspirations": included_inspirations,
                 "chapters": chapters,
+                "retrieval_results": retrieval_results,
                 "context_budget": budgeted["report"],
             },
         }
 
     return run
+
+
+def _build_retrieval_query(project, chapter: Chapter, characters: list[dict], inspirations: list[str]) -> str:
+    character_text = "；".join(
+        "；".join(
+            str(value)
+            for value in (
+                item.get("name"),
+                item.get("role"),
+                item.get("current_goal"),
+                item.get("key_memories"),
+                item.get("relationships"),
+                item.get("period_stage"),
+                item.get("period_summary"),
+            )
+            if value
+        )
+        for item in characters
+    )
+    return "\n".join(
+        item
+        for item in (
+            chapter.title,
+            project.positioning or "",
+            project.worldview or "",
+            project.main_plot or "",
+            character_text,
+            "；".join(inspirations),
+        )
+        if item
+    )
+
+
+def _build_vector_memory_documents(
+    project_id: int,
+    chapters: list[Chapter],
+    characters: list[dict],
+    foreshadowing_items: list[dict],
+    world_rules: list[dict],
+    story_events: list[dict],
+) -> list[VectorMemoryDocument]:
+    documents: list[VectorMemoryDocument] = []
+    documents.extend(
+        VectorMemoryDocument(
+            source="chapter_summaries",
+            source_id=str(chapter.id),
+            project_id=project_id,
+            text=f"第 {chapter.number} 章：{chapter.summary}",
+            metadata={"chapter_number": chapter.number, "title": chapter.title},
+        )
+        for chapter in chapters
+        if chapter.summary
+    )
+    documents.extend(
+        VectorMemoryDocument(
+            source="story_events",
+            source_id=str(item.get("id") or item.get("source_chapter_id") or index),
+            project_id=project_id,
+            text=_context_item_text(item),
+            metadata={"source_chapter_id": item.get("source_chapter_id")},
+        )
+        for index, item in enumerate(story_events)
+    )
+    documents.extend(
+        VectorMemoryDocument(
+            source="world_rules",
+            source_id=str(item.get("id") or item.get("source_chapter_id") or index),
+            project_id=project_id,
+            text=_context_item_text(item),
+            metadata={"source_chapter_id": item.get("source_chapter_id"), "status": item.get("status")},
+        )
+        for index, item in enumerate(world_rules)
+    )
+    documents.extend(
+        VectorMemoryDocument(
+            source="characters",
+            source_id=str(item.get("name") or index),
+            project_id=project_id,
+            text=_context_item_text(item),
+            metadata={"name": item.get("name"), "period_stage": item.get("period_stage")},
+        )
+        for index, item in enumerate(characters)
+    )
+    documents.extend(
+        VectorMemoryDocument(
+            source="foreshadowing_items",
+            source_id=str(item.get("id") or index),
+            project_id=project_id,
+            text=_context_item_text(item),
+            metadata={"status": item.get("status")},
+        )
+        for index, item in enumerate(foreshadowing_items)
+    )
+    return documents
+
+
+def _retrieve_context(project_id: int, query: str, documents: list[VectorMemoryDocument]) -> dict:
+    try:
+        return retrieve_vector_memory(project_id, query, documents)
+    except Exception as exc:
+        return {"backend": "unavailable", "query": query, "hits": [], "error": str(exc)}
+
+
+def _rank_candidates_by_retrieval(candidates: dict[str, list], hits: list[dict]) -> dict[str, list]:
+    hit_order = {str(item.get("text", "")): index for index, item in enumerate(hits)}
+    ranked: dict[str, list] = {}
+    for section, items in candidates.items():
+        ranked[section] = sorted(
+            items,
+            key=lambda item: (hit_order.get(_context_item_text(item), len(hit_order) + 1), _context_item_text(item)),
+        )
+    return ranked
 
 
 def _build_context_budget(candidates: dict[str, list]) -> dict:
@@ -299,17 +427,17 @@ def _fit_items(items: list, budget: int) -> tuple[list, list[str], int]:
 
 
 def _rough_context_size(value) -> int:
-    if isinstance(value, dict):
-        return len("；".join(str(item) for item in value.values() if item is not None))
-    return len(str(value))
+    return len(_context_item_text(value))
 
 
 def _compact_omitted_item(value) -> str:
+    return _context_item_text(value)[:120]
+
+
+def _context_item_text(value) -> str:
     if isinstance(value, dict):
-        text = value.get("summary") or value.get("rule") or value.get("content") or value.get("title") or str(value)
-    else:
-        text = str(value)
-    return text[:120]
+        return "；".join(str(item) for item in value.values() if item is not None and str(item).strip())
+    return str(value)
 
 
 def _build_chapter_target(state: ChapterGenerationState) -> ChapterGenerationState:

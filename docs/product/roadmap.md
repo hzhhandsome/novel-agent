@@ -81,7 +81,7 @@
 状态：
 
 - 已完成基础能力：`load_context` 使用规则式字符预算裁剪章节摘要、事件、灵感、伏笔和世界观规则，并在 Agent 后台上下文视图展示预算占用和被裁剪内容摘要。
-- 后续细化：接入 RAG 相关性排序、模型 tokenizer 估算、固定上下文预算统计和更细的优先级策略。
+- 后续细化：模型 tokenizer 估算、固定上下文预算统计和更细的优先级策略。
 
 目标：
 
@@ -126,21 +126,28 @@
 
 ### RAG 检索：按角色、伏笔、地点召回旧信息
 
+状态：
+
+- 已完成基础能力：Docker Qdrant 向量库、本地免费 embedding、测试用 hash embedding、正式记忆向量召回、`load_context` 接入、上下文预算接入、Agent 后台召回展示。
+- 后续细化：索引重建 API、混合检索、重排、embedding 批处理、recall@k 评估和更多实体类型。
+
 目标：
 
 - 当前章节生成前，根据章节目标、涉及角色、伏笔、地点和关键词召回相关旧信息。
 - 检索来源包括章节摘要、事件时间线、世界观规则、角色卡、伏笔表。
 - 检索结果进入上下文预算管理，由预算器决定哪些内容进入最终 prompt。
 
-第一阶段建议：
+第一阶段实现：
 
-- 先做结构化字段和关键词检索，不急于接向量数据库。
-- 向量检索稳定后再引入 embedding、重排和 recall@k 评估。
+- 使用 Qdrant 作为 Docker 向量数据库。
+- 使用 `BAAI/bge-small-zh-v1.5` 作为 Docker 运行时本地 embedding 模型。
+- 本地测试默认使用确定性 hash embedding，避免测试依赖模型下载。
+- 向量召回结果进入上下文预算管理，最终仍由预算器控制 prompt 内容。
 
 涉及模块：
 
 - `docs/modules/generation-flow.md`
-- 后续可新增 `docs/modules/retrieval.md`
+- `docs/modules/retrieval.md`
 
 ### Eval：摘要事实保留率和审核冲突检出率
 

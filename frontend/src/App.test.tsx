@@ -255,6 +255,19 @@ describe("App", () => {
               world_rules: [{ rule: "真实规则", limitation: "真实限制" }],
               chapter_summaries: ["真实摘要"],
               inspirations: ["真实灵感"],
+              retrieval_results: {
+                backend: "local_vector",
+                query: "废城 图书馆 修书",
+                hits: [
+                  {
+                    source: "story_events",
+                    source_id: "7",
+                    score: 0.82,
+                    text: "RELEVANT_EVENT_MARKER 手背页码在废城图书馆出现。",
+                    metadata: { source_chapter_id: 2 },
+                  },
+                ],
+              },
               context_budget: {
                 total_budget: 6000,
                 used: 4200,
@@ -332,6 +345,9 @@ describe("App", () => {
     expect(screen.getByText(/4200 \/ 6000/)).toBeInTheDocument();
     expect(screen.getByText(/chapter_summaries/)).toBeInTheDocument();
     expect(screen.getByText(/被裁剪的旧摘要/)).toBeInTheDocument();
+    expect(screen.getByText(/local_vector/)).toBeInTheDocument();
+    expect(screen.getByText(/废城 图书馆 修书/)).toBeInTheDocument();
+    expect(screen.getByText(/RELEVANT_EVENT_MARKER/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "结果与更新" }));
     expect(screen.getByText(/真实审核发现/)).toBeInTheDocument();

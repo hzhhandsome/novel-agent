@@ -17,7 +17,7 @@
 
 当前章节生成节点顺序：
 
-1. `load_context`：读取项目、章节、角色时期卡、事件时间线、世界观规则、伏笔、灵感、前文摘要，并通过规则式上下文预算决定实际进入 prompt 的可变上下文。
+1. `load_context`：读取项目、章节、角色时期卡、事件时间线、世界观规则、伏笔、灵感、前文摘要，先通过 RAG 召回相关旧信息，再通过规则式上下文预算决定实际进入 prompt 的可变上下文。
 2. `build_chapter_target`：确定本章目标。
 3. `build_prompt_package`：组装提示包。
 4. `generate_prose`：调用模型生成正文候选。
@@ -45,7 +45,13 @@
 - `foreshadowing_items`：保留预算内伏笔条目。
 - `world_rules`：保留预算内世界观规则。
 
-预算报告写入 `context_package.context_budget`，包含总预算、各分区已用量、纳入数量、裁剪数量和被裁剪内容摘要。Agent 后台上下文视图应展示该报告，方便排查章节增多后的幻觉来源。当前预算器会保证每个非空分区至少保留一条内容；后续接入 RAG 后，检索结果也应先进入预算器，再决定是否进入 prompt。
+预算报告写入 `context_package.context_budget`，包含总预算、各分区已用量、纳入数量、裁剪数量和被裁剪内容摘要。Agent 后台上下文视图应展示该报告，方便排查章节增多后的幻觉来源。当前预算器会保证每个非空分区至少保留一条内容；RAG 检索结果会先调整候选优先级，再由预算器决定是否进入 prompt。
+
+### RAG 召回
+
+`load_context` 会从正式记忆构建向量检索文档，并根据本章查询召回相关旧信息。检索来源包括已采纳章节摘要、事件时间线、世界观规则、角色时期卡和伏笔条目。检索报告写入 `context_package.retrieval_results`，前端 Agent 后台在“上下文”tab 展示后端类型、查询和命中内容。
+
+Docker 运行时使用 Qdrant 和本地 `sentence-transformers` embedding；测试和本地默认使用 hash embedding。候选正文和候选摘要不进入检索文档，避免污染正式记忆。
 
 ### SSE 进度输出
 
@@ -101,6 +107,7 @@
 - `Character.period_stage` / `period_summary`：角色当前时期卡的正式状态。
 - `StoryEvent`：已采纳章节沉淀的事件时间线。
 - `WorldRule`：项目世界观和已采纳章节沉淀的规则约束。
+- `context_package.retrieval_results`：本次 `load_context` 的 RAG 召回报告，包含后端、查询、命中来源、分数和文本。
 - `context_package.context_budget`：本次 `load_context` 的上下文预算报告，只描述可变上下文分区的预算使用和裁剪结果。
 
 任务状态用于中断恢复，不应只依赖内存。前端 Agent 后台应优先读取 `GenerationTaskStep.output_snapshot` 展示真实节点输出；没有任务时才显示目标流程占位。
@@ -142,4 +149,4 @@ python -m pytest -v
 - `persist_candidate_result` 不是自动采纳，不得绕过采纳边界直接污染正式上下文或结构化记忆。
 - 全自动生成只能作为外层任务循环复用单章 LangGraph，不要把多个章节的生成逻辑写成不可恢复的大函数。
 - 后续输入锁定、AI 输入评判、LLM 切换都需要考虑当前任务状态和生成记录复现。
-- 调整上下文来源或新增可变记忆实体时，必须同步检查上下文预算分区，避免新增内容绕过预算直接进入 prompt。
+- 调整上下文来源或新增可变记忆实体时，必须同步检查 RAG 检索来源和上下文预算分区，避免新增内容绕过预算直接进入 prompt。

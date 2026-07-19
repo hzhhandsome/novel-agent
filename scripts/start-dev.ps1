@@ -8,9 +8,9 @@ $DatabaseUrl = "postgresql+psycopg://novel:novel@localhost:55432/novel_agent"
 
 New-Item -ItemType Directory -Force $LogDir | Out-Null
 
-Write-Host "Starting PostgreSQL middleware..."
+Write-Host "Starting PostgreSQL and Qdrant middleware..."
 Push-Location $RepoRoot
-docker compose up -d postgres
+docker compose up -d postgres qdrant
 Pop-Location
 
 Write-Host "Applying database migrations..."

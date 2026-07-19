@@ -174,6 +174,26 @@ function formatContextBudget(value: unknown): string {
   return [`${used} / ${total}`, sectionText, omittedText].filter(Boolean).join("；");
 }
 
+function formatRetrievalResults(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const retrieval = value as Record<string, unknown>;
+  const backend = stringifyValue(retrieval.backend);
+  const query = stringifyValue(retrieval.query);
+  const hits = Array.isArray(retrieval.hits) ? retrieval.hits : [];
+  const hitText = hits
+    .map((hit) => {
+      if (!hit || typeof hit !== "object" || Array.isArray(hit)) return "";
+      const item = hit as Record<string, unknown>;
+      const source = stringifyValue(item.source);
+      const score = stringifyValue(item.score);
+      const text = stringifyValue(item.text);
+      return [source, score ? `score=${score}` : "", text].filter(Boolean).join("：");
+    })
+    .filter(Boolean)
+    .join("；");
+  return [`backend=${backend}`, query ? `query=${query}` : "", hitText].filter(Boolean).join("；");
+}
+
 function stepStatusText(status: string | undefined): string {
   if (status === "completed") return "完成";
   if (status === "running") return "执行中";
@@ -207,6 +227,7 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
   const loadContextOutput = getOutput(task, "load_context");
   const contextPackage = getNestedRecord(loadContextOutput, "context_package");
   const contextBudgetText = formatContextBudget(contextPackage.context_budget);
+  const retrievalText = formatRetrievalResults(contextPackage.retrieval_results);
   const candidateResult = getCandidateResult(task);
   const auditResult = getNestedRecord(candidateResult, "audit");
   const foreshadowingResult = getNestedRecord(candidateResult, "foreshadowing");
@@ -253,10 +274,11 @@ export function AgentWorkspace({ project, task, busy, collapsed, onToggleCollaps
           joinItems(project?.foreshadowing_items.map((item) => item.content) ?? []),
       ],
       ["作者灵感", stringifyValue(contextPackage.inspirations) || joinItems(project?.inspirations.map((item) => item.content) ?? [])],
+      ["RAG 召回", retrievalText || "尚未生成召回报告。"],
       ["上下文预算", contextBudgetText || "尚未生成预算报告。"],
       ["压缩状态", "旧章节正文达到阈值后压缩为摘要；关键设定、角色变化和伏笔保留。"],
     ],
-    [contextBudgetText, contextPackage, project],
+    [contextBudgetText, contextPackage, project, retrievalText],
   );
   const flowDisplayItems = flowNodes.map((node) => {
     const step = realStepByName.get(node.key);

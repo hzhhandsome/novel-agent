@@ -1,3 +1,5 @@
+import re
+
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.memory import StoryEvent
 from app.services.chapter_service import generate_chapter_candidate
@@ -58,7 +60,11 @@ def test_load_context_applies_budget_and_omits_old_summaries(client_with_db):
     assert budget["omitted"]["chapter_summaries"]
     assert budget["omitted"]["story_events"]
     assert len(package["chapter_summaries"]) < 14
-    assert "OLD_SUMMARY_4" in " ".join(budget["omitted"]["chapter_summaries"])
-    assert "OLD_SUMMARY_4" not in prompt_package
-    assert "OLD_EVENT_1" in " ".join(budget["omitted"]["story_events"])
-    assert "OLD_EVENT_1" not in prompt_package
+    omitted_summaries = " ".join(budget["omitted"]["chapter_summaries"])
+    omitted_events = " ".join(budget["omitted"]["story_events"])
+    omitted_summary_markers = re.findall(r"OLD_SUMMARY_\d+", omitted_summaries)
+    omitted_event_markers = re.findall(r"OLD_EVENT_\d+", omitted_events)
+    assert omitted_summary_markers
+    assert omitted_event_markers
+    assert all(marker not in prompt_package for marker in omitted_summary_markers)
+    assert all(marker not in prompt_package for marker in omitted_event_markers)
