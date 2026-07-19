@@ -151,6 +151,11 @@
 
 ### Eval：摘要事实保留率和审核冲突检出率
 
+状态：
+
+- 已完成基础能力：确定性 eval 函数、摘要事实保留率、审核冲突检出率、内置 gold case、命令行回放 runner。
+- 后续细化：接入真实 `GenerationRun`、入库保存 eval 结果、precision/recall/F1、LLM-as-judge、前端报告。
+
 目标：
 
 - 建立模型质量评测，不只依赖人工感觉判断“生成好不好”。
@@ -166,7 +171,7 @@
 涉及模块：
 
 - `docs/modules/generation-flow.md`
-- 后续可新增 `docs/modules/evaluation.md`
+- `docs/modules/evaluation.md`
 
 ### 模型路由：生成、摘要、审核可选不同模型
 
