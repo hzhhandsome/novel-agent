@@ -193,6 +193,10 @@ h3 {
   color: #68716a;
 }
 
+.module-row.empty-state {
+  color: #68716a;
+}
+
 .primary-button,
 .secondary-button,
 .icon-text-button,
@@ -433,6 +437,18 @@ button:disabled {
 
 .backstage-bar span {
   color: #bac4ba;
+}
+
+.backstage-bar .context-budget-pill {
+  display: inline-flex;
+  width: fit-content;
+  margin-top: 4px;
+  padding: 2px 7px;
+  border: 1px solid #56635b;
+  border-radius: 999px;
+  background: #242b26;
+  color: #f5f1e8;
+  font-size: 12px;
 }
 
 .backstage-tabs {

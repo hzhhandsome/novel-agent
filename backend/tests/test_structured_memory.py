@@ -55,3 +55,23 @@ def test_accepting_chapter_commits_structured_memory(client_with_db):
     first_character = refreshed["characters"][0]
     assert "行动者" in first_character["period_summary"]
     assert first_character["period_source_chapter_id"] == chapter_id
+
+
+def test_accepting_chapter_commits_foreshadowing_memory(client_with_db):
+    project = client_with_db.post(
+        "/api/projects",
+        json={"idea": "一个邮差给梦境投递真实信件"},
+    ).json()
+    chapter_id = project["chapters"][0]["id"]
+
+    client_with_db.post(f"/api/chapters/{chapter_id}/generate")
+    accepted = client_with_db.post(f"/api/chapters/{chapter_id}/accept")
+
+    assert accepted.status_code == 200
+    refreshed = client_with_db.get(f"/api/projects/{project['id']}").json()
+    foreshadowing_items = refreshed["foreshadowing_items"]
+    assert any("尚未解释的细节" in item["content"] for item in foreshadowing_items)
+    committed_item = next(item for item in foreshadowing_items if "尚未解释的细节" in item["content"])
+    assert committed_item["source_chapter_id"] == chapter_id
+    assert committed_item["status"] == "planted"
+    assert "未提前泄露" in committed_item["notes"]

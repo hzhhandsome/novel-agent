@@ -177,6 +177,16 @@ function formatContextBudget(value: unknown): string {
   return [`${used} / ${total}`, sectionText, omittedText].filter(Boolean).join("；");
 }
 
+function formatContextBudgetHeader(value: unknown): string {
+  if (!value || typeof value !== "object" || Array.isArray(value)) return "";
+  const budget = value as Record<string, unknown>;
+  const used = Number(budget.used ?? 0);
+  const total = Number(budget.total_budget ?? 0);
+  if (!total) return "";
+  const percent = Math.round((used / total) * 100);
+  return `上下文 ${used} / ${total}（${percent}%）`;
+}
+
 function formatRetrievalResults(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const retrieval = value as Record<string, unknown>;
@@ -260,11 +270,36 @@ function formatModelUsageFromOutput(output: Record<string, unknown>): string {
   return `输入 ${inputTokens} / 输出 ${outputTokens} token；成本 ${Number(cost.toFixed(6))}；耗时 ${durationMs}ms`;
 }
 
+function formatPromptSummary(value: unknown): string {
+  const text = stringifyValue(value);
+  if (!text) return "";
+  return text.length > 360 ? `${text.slice(0, 360)}...` : text;
+}
+
+function formatPersistenceResult(value: Record<string, unknown>): string {
+  if (!Object.keys(value).length) return "";
+  const items = [
+    value.saved_candidate === true ? "候选正文已保存" : "候选正文未保存",
+    value.saved_summary === true ? "候选摘要已保存" : "候选摘要未保存",
+    value.official_content_committed === true ? "正式正文已写入" : "正式正文未写入",
+  ];
+  const reviewCount = Number(value.saved_review_findings ?? 0);
+  if (reviewCount) items.push(`审核发现 ${reviewCount} 条`);
+  return items.join("；");
+}
+
 function stepSummary(step: GenerationStep | null, node: FlowNode): string {
   if (!step) return node.summary;
   if (step.error_message) return step.error_message;
-  if (step.name === "generate_prose") return "正文节点已完成，正文内容显示在中间正文区。";
   if (step.name === "load_context") return "上下文包已加载，预算和召回信息可在下方查看。";
+  if (step.name === "build_chapter_target") return "本章线路已确认。";
+  if (step.name === "build_prompt_package") return "本章提示包已生成。";
+  if (step.name === "generate_prose") return "正文节点已完成，正文内容显示在中间正文区。";
+  if (step.name === "audit_prose") return "正文审核已完成。";
+  if (step.name === "summarize_chapter") return "章节摘要已生成。";
+  if (step.name === "judge_foreshadowing") return "伏笔新增、推进、回收和泄露判断已完成。";
+  if (step.name === "judge_character_period") return "角色时期卡判断已完成。";
+  if (step.name === "propose_future_plan_updates") return "后续章节线路调整建议已生成。";
   if (step.name === "build_candidate_result") return "候选结果已汇总，摘要、审核、伏笔和角色卡建议进入结果区。";
   if (step.name === "persist_candidate_result") return "候选结果、节点快照和写入状态已保存。";
   return node.summary;
@@ -273,6 +308,7 @@ function stepSummary(step: GenerationStep | null, node: FlowNode): string {
 function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[string, string]> {
   if (!step) return node.details;
 
+  const input = step.input_snapshot ?? {};
   const output = step.output_snapshot ?? {};
   const items: Array<[string, string]> = [["节点状态", stepStatusText(step.status)]];
   const usageText = formatModelUsageFromOutput(output);
@@ -286,6 +322,59 @@ function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[str
     if (retrievalText) items.push(["RAG 召回", retrievalText]);
   }
 
+  if (step.name === "build_chapter_target") {
+    const target = stringifyValue(output.chapter_target);
+    if (target) items.push(["本章线路", target]);
+  }
+
+  if (step.name === "build_prompt_package") {
+    const target = stringifyValue(input.chapter_target);
+    const prompt = formatPromptSummary(output.prompt_package);
+    if (target) items.push(["本章线路", target]);
+    if (prompt) items.push(["提示包摘要", prompt]);
+  }
+
+  if (step.name === "generate_prose") {
+    const content = stringifyValue(output.generated_content);
+    items.push(["正文输出", content ? `已生成 ${content.length} 字，正文显示在中间正文区。` : "正文内容显示在中间正文区。"]);
+  }
+
+  if (step.name === "audit_prose") {
+    const audit = getNestedRecord(output, "audit_result");
+    const findings = stringifyValue(audit.findings ?? output.review_findings);
+    items.push(["审核发现", findings || "未发现阻塞问题。"]);
+    if ("blocking" in audit) items.push(["是否阻塞", audit.blocking ? "有阻塞" : "无阻塞"]);
+  }
+
+  if (step.name === "summarize_chapter") {
+    const summary = stringifyValue(output.summary) || stringifyValue(getNestedRecord(output, "summary_result").summary);
+    if (summary) items.push(["章节摘要", summary]);
+  }
+
+  if (step.name === "judge_foreshadowing") {
+    const decisions = getNestedRecord(output, "foreshadowing_decisions");
+    items.push(["新增伏笔", stringifyValue(decisions.new) || "无"]);
+    items.push(["推进伏笔", stringifyValue(decisions.advanced) || "无"]);
+    items.push(["回收伏笔", stringifyValue(decisions.resolved) || "无"]);
+    items.push(["提前泄露", stringifyValue(decisions.leaked) || "无"]);
+    if (decisions.notes) items.push(["备注", stringifyValue(decisions.notes)]);
+  }
+
+  if (step.name === "judge_character_period") {
+    const decisions = getNestedRecord(output, "character_period_decisions");
+    items.push(["角色更新", stringifyValue(decisions.updates) || "无"]);
+    items.push(["新时期卡", stringifyValue(decisions.new_period_cards) || "无"]);
+    items.push(["记忆变化", stringifyValue(decisions.memory_changes) || "无"]);
+    items.push(["关系变化", stringifyValue(decisions.relationship_changes) || "无"]);
+    if ("stage_changed" in decisions) items.push(["阶段变化", decisions.stage_changed ? "发生阶段变化" : "未发生阶段变化"]);
+    if (decisions.skipped) items.push(["跳过原因", stringifyValue(decisions.error) || "模型返回不可用，已跳过非关键角色判断。"]);
+  }
+
+  if (step.name === "propose_future_plan_updates") {
+    const updates = getNestedRecord(output, "future_plan_updates");
+    items.push(["后续线路建议", stringifyValue(updates.suggestions) || stringifyValue(updates) || "无调整建议"]);
+  }
+
   if (step.name === "build_candidate_result") {
     const candidate = getNestedRecord(output, "candidate_result");
     const summary = stringifyValue(candidate.summary);
@@ -295,7 +384,7 @@ function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[str
   }
 
   if (step.name === "persist_candidate_result") {
-    const persistence = stringifyValue(output.persistence_result);
+    const persistence = formatPersistenceResult(getNestedRecord(output, "persistence_result")) || stringifyValue(output.persistence_result);
     if (persistence) items.push(["入库动作", persistence]);
   }
 
@@ -363,6 +452,7 @@ export function AgentWorkspace({
   const loadContextOutput = getOutput(task, "load_context");
   const contextPackage = getNestedRecord(loadContextOutput, "context_package");
   const contextBudgetText = formatContextBudget(contextPackage.context_budget);
+  const contextBudgetHeaderText = formatContextBudgetHeader(contextPackage.context_budget);
   const retrievalText = formatRetrievalResults(contextPackage.retrieval_results);
   const candidateResult = getCandidateResult(task);
   const auditResult = getNestedRecord(candidateResult, "audit");
@@ -458,6 +548,7 @@ export function AgentWorkspace({
           <h2>Agent 创作后台</h2>
           <span>{task ? `全自动运行 · ${task.status}` : "等待生成"}</span>
           {usageSummary ? <span>{usageSummary}</span> : null}
+          {contextBudgetHeaderText ? <span className="context-budget-pill">{contextBudgetHeaderText}</span> : null}
         </div>
         <div className="toolbar-actions">
           <button className="secondary-button" type="button" onClick={handleRunEval} disabled={busy} title="运行 Eval">

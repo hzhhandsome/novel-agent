@@ -163,3 +163,10 @@ python -m pytest -v
 - 后续输入锁定、AI 输入评判、LLM 切换都需要考虑当前任务状态和生成记录复现。
 - 调整上下文来源或新增可变记忆实体时，必须同步检查 RAG 检索来源和上下文预算分区，避免新增内容绕过预算直接进入 prompt。
 - 生成和重试必须使用任务创建时的 `model_config_snapshot`，不要在任务中途重新读取当前全局模型配置。
+
+## 2026-07-19 更新
+
+- Agent 后台流程节点应优先读取 `GenerationTaskStep.output_snapshot` 展示真实输出，而不是只显示流程说明。
+- 大型 `input_snapshot` / `output_snapshot` 仍保留在“原始输出”中，默认收起，用于调试。
+- `build_chapter_target` 展示实际本章线路，`build_prompt_package` 展示提示包摘要，`summarize_chapter` 展示实际摘要，判断类节点展示真实判断结果。
+- `persist_candidate_result` 只保存候选结果；正式正文、伏笔、角色卡和结构化记忆仍由采纳路径写入。

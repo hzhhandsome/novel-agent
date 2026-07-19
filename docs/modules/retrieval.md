@@ -100,3 +100,8 @@ npm run build
 - 新增检索来源后，必须明确它是否是正式记忆，并同步上下文预算分区。
 - Qdrant 失败不能阻塞基础生成；当前实现会回退到本地向量排序。
 - 更换 embedding 模型时必须同步 `NOVEL_AGENT_EMBEDDING_DIMENSION`。
+
+## 2026-07-19 更新
+
+- Agent 后台顶部常驻显示本次 `load_context.context_budget` 的占用摘要，方便判断长篇生成时上下文是否接近预算上限。
+- RAG 召回结果仍在“上下文”tab 和 `load_context` 节点详情中展示；召回结果只影响候选优先级，最终是否进入 prompt 仍由上下文预算决定。

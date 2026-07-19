@@ -125,3 +125,9 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 - 新增模型配置时必须更新 `.env.example`，但不能写真实密钥。
 - 如果模型响应结构改变，优先在 provider 层解析和校验，不把不稳定格式泄漏到 LangGraph 节点。
 - 不要把 API key 明文写入 `GenerationTask.model_config_snapshot` 或 `GenerationRun.model_config_snapshot`。
+
+## 2026-07-19 更新
+
+- “模型最大 token”表示一次模型调用中输入和输出共享的窗口上限。
+- “上下文预算”是系统主动分配给长期记忆、摘要、伏笔、灵感等上下文的预算，应小于模型最大 token，并为系统提示、本章目标和正文输出预留空间。
+- Agent 后台顶部显示的上下文占用来自 `load_context.context_budget`，用于观察上下文是否接近预算上限；当前仍是粗略估算，不等同于 provider 返回的真实 tokenizer 计数。

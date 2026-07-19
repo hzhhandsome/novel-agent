@@ -562,6 +562,31 @@ describe("App", () => {
           },
         },
         {
+          id: 2,
+          task_id: 7,
+          name: "build_chapter_target",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            chapter_target: "真实本章线路：主角确认修书代价。",
+          },
+        },
+        {
+          id: 3,
+          task_id: 7,
+          name: "build_prompt_package",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {
+            context: "真实上下文",
+            chapter_target: "真实本章线路：主角确认修书代价。",
+          },
+          output_snapshot: {
+            prompt_package: "真实提示包：目标、限制、角色状态、伏笔。",
+          },
+        },
+        {
           id: 4,
           task_id: 7,
           name: "generate_prose",
@@ -590,6 +615,65 @@ describe("App", () => {
               estimated_output_tokens: 20,
               duration_ms: 20,
               estimated_cost: 0.08,
+            },
+          },
+        },
+        {
+          id: 6,
+          task_id: 7,
+          name: "summarize_chapter",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            summary: "真实章节摘要：主角确认修书代价。",
+            summary_result: { summary: "真实章节摘要：主角确认修书代价。", source: "post_audit" },
+          },
+        },
+        {
+          id: 7,
+          task_id: 7,
+          name: "judge_foreshadowing",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            foreshadowing_decisions: {
+              new: ["真实新增伏笔"],
+              advanced: ["真实伏笔推进"],
+              resolved: ["真实回收伏笔"],
+              leaked: [],
+              notes: "真实伏笔备注",
+            },
+          },
+        },
+        {
+          id: 8,
+          task_id: 7,
+          name: "judge_character_period",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            character_period_decisions: {
+              updates: ["真实角色更新"],
+              new_period_cards: [{ character: "真实角色", stage: "真实新阶段", summary: "真实阶段摘要" }],
+              memory_changes: ["真实记忆变化"],
+              relationship_changes: ["真实关系变化"],
+              stage_changed: true,
+            },
+          },
+        },
+        {
+          id: 9,
+          task_id: 7,
+          name: "propose_future_plan_updates",
+          status: "completed",
+          error_message: null,
+          input_snapshot: {},
+          output_snapshot: {
+            future_plan_updates: {
+              suggestions: [{ chapter: "第 4 章", change: "真实线路调整", reason: "真实调整原因" }],
             },
           },
         },
@@ -648,6 +732,15 @@ describe("App", () => {
     expect(screen.getByText("上下文包已加载，预算和召回信息可在下方查看。")).toBeInTheDocument();
     expect(screen.getByText(/估算 token：520/)).toBeInTheDocument();
     expect(screen.getByText(/估算成本：0.5/)).toBeInTheDocument();
+    expect(screen.getByText(/上下文 4200 \/ 6000/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /2.*确认本章线路.*完成/ }));
+    expect(screen.getByText("本章线路")).toBeInTheDocument();
+    expect(screen.getByText("真实本章线路：主角确认修书代价。")).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("button", { name: /3.*生成本章提示包.*完成/ }));
+    expect(screen.getByText("提示包摘要")).toBeInTheDocument();
+    expect(screen.getByText(/真实提示包/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /4.*生成章节正文.*完成/ }));
     expect(screen.getByText("模型用量")).toBeInTheDocument();
@@ -655,10 +748,23 @@ describe("App", () => {
     fireEvent.click(screen.getByText("原始输出"));
     expect(screen.getByText(/generate_prose_model_usage/)).toBeInTheDocument();
 
+    fireEvent.click(screen.getByRole("button", { name: /6.*章节摘要.*完成/ }));
+    expect(screen.getByText("真实章节摘要：主角确认修书代价。")).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /7.*伏笔判断.*完成/ }));
+    expect(screen.getByText(/真实新增伏笔/)).toBeInTheDocument();
+    expect(screen.getByText(/真实回收伏笔/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /8.*角色时期卡判断.*完成/ }));
+    expect(screen.getByText(/真实新阶段/)).toBeInTheDocument();
+    expect(screen.getByText(/真实记忆变化/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /9.*判断后续线路调整.*完成/ }));
+    expect(screen.getByText(/真实调整原因/)).toBeInTheDocument();
+    fireEvent.click(screen.getByRole("button", { name: /11.*保存候选结果.*完成/ }));
+    expect(screen.getByText(/正式正文未写入/)).toBeInTheDocument();
+
     fireEvent.click(screen.getByRole("tab", { name: "上下文" }));
     expect(screen.getByText("真实世界观")).toBeInTheDocument();
     expect(screen.getByText("真实伏笔")).toBeInTheDocument();
-    expect(screen.getByText(/4200 \/ 6000/)).toBeInTheDocument();
+    expect(screen.getAllByText(/4200 \/ 6000/).length).toBeGreaterThanOrEqual(1);
     expect(screen.getByText(/chapter_summaries/)).toBeInTheDocument();
     expect(screen.getByText(/被裁剪的旧摘要/)).toBeInTheDocument();
     expect(screen.getByText(/local_vector/)).toBeInTheDocument();
@@ -1033,5 +1139,36 @@ describe("ModulePanel", () => {
     );
 
     expect(screen.getByLabelText("作者灵感输入")).toBeDisabled();
+  });
+
+  it("shows foreshadowing records by default with status", () => {
+    render(
+      <ModulePanel
+        project={makeProject()}
+        inspirationText=""
+        busy={false}
+        onInspirationChange={() => undefined}
+        onAddInspiration={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("伏笔记录")).toBeInTheDocument();
+    const foreshadowingRow = screen.getByText("手背页码从 17 变为 16").closest("article") as HTMLElement;
+    expect(foreshadowingRow).toBeInTheDocument();
+    expect(within(foreshadowingRow).getByText("active")).toBeInTheDocument();
+  });
+
+  it("shows an empty state when there are no foreshadowing records", () => {
+    render(
+      <ModulePanel
+        project={{ ...makeProject(), foreshadowing_items: [] }}
+        inspirationText=""
+        busy={false}
+        onInspirationChange={() => undefined}
+        onAddInspiration={() => undefined}
+      />,
+    );
+
+    expect(screen.getByText("暂无伏笔记录")).toBeInTheDocument();
   });
 });

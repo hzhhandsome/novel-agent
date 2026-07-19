@@ -91,3 +91,10 @@ python -m pytest backend/tests/test_chapter_generation.py backend/tests/test_aut
 - 新增记忆实体时，必须同步项目 API schema、前端类型和后台上下文展示。
 - `load_context` 应读取结构化记忆，但必须交给 RAG 和上下文预算管理决定实际进入 prompt 的事件、规则等可变内容。
 - 事件和规则当前是第一阶段基础实现，后续需要补更细的检索字段和评测样例。
+
+## 2026-07-19 更新
+
+- 采纳章节时会把 `judge_foreshadowing.foreshadowing_decisions` 写入正式 `ForeshadowingItem` 表。
+- `new` 写为 `planted`，`advanced` 写为 `advanced`，`resolved` 写为 `recovered`；`notes` 保留为伏笔备注。
+- 正式伏笔仍不能在 `persist_candidate_result` 候选保存阶段写入，避免未采纳内容污染长期记忆。
+- 右侧模块栏的“伏笔记录”默认展开，展示内容、状态和备注；没有记录时显示空状态。

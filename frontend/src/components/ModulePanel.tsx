@@ -96,12 +96,20 @@ export function ModulePanel({
           ))}
         </div>
       </details>
-      <details>
+      <details open>
         <summary>伏笔记录</summary>
         <div className="stack">
-          {project?.foreshadowing_items.map((item) => (
-            <p className="module-row" key={item.id}>{item.content}</p>
-          ))}
+          {project?.foreshadowing_items.length ? (
+            project.foreshadowing_items.map((item) => (
+              <article className="module-row" key={item.id}>
+                <strong>{item.content}</strong>
+                <span>{item.status}</span>
+                {item.notes ? <p>{item.notes}</p> : null}
+              </article>
+            ))
+          ) : (
+            <p className="module-row empty-state">暂无伏笔记录</p>
+          )}
         </div>
       </details>
     </aside>

@@ -86,3 +86,9 @@ GET /api/evals/builtin
 ```
 
 该接口复用 `backend/app/evals/run.py` 的 `run_builtin_evals()`，返回结构与命令行 `python -m app.evals.run` 保持一致。当前接口只读取内置 gold cases，不写数据库。
+
+## 2026-07-19 更新
+
+- 前端 Eval 报告继续显示在 Agent 后台“结果与更新”tab。
+- 当前 Eval 仍是确定性 gold case 文本匹配，用于摘要事实保留率和审核冲突检出率；不能宣称已经覆盖完整语义评测。
+- 后续如果要衡量 RAG 召回质量，应新增 recall@k / MRR 类指标，不要混入当前摘要和审核 Eval 指标。

@@ -7,6 +7,7 @@ from sqlalchemy.orm import Session, selectinload
 
 from app.agent.chapter_graph import build_chapter_generation_graph
 from app.models.chapter import Chapter, ChapterStatus
+from app.models.foreshadowing import ForeshadowingItem, ForeshadowingStatus
 from app.models.generation import GenerationRun, GenerationTask, GenerationTaskStatus, GenerationTaskStep, GenerationTaskStepStatus
 from app.models.memory import StoryEvent, WorldRule
 from app.services.model_provider import ModelProvider
@@ -378,6 +379,7 @@ def _commit_structured_memory(session: Session, chapter_id: int) -> None:
 
     _commit_story_event(session, chapter)
     _commit_world_rule(session, chapter)
+    _commit_foreshadowing_items(session, chapter, task)
     _commit_character_periods(session, chapter, task)
 
 
@@ -435,6 +437,45 @@ def _commit_world_rule(session: Session, chapter: Chapter) -> None:
             status="active",
         )
     )
+
+
+def _commit_foreshadowing_items(session: Session, chapter: Chapter, task: GenerationTask) -> None:
+    decisions = _step_output(task, "judge_foreshadowing").get("foreshadowing_decisions", {})
+    if not decisions:
+        return
+
+    notes = decisions.get("notes")
+    status_by_key = {
+        "new": ForeshadowingStatus.planted,
+        "advanced": ForeshadowingStatus.advanced,
+        "resolved": ForeshadowingStatus.recovered,
+    }
+    for key, status in status_by_key.items():
+        for content in _string_items(decisions.get(key)):
+            existing = (
+                session.query(ForeshadowingItem)
+                .filter(
+                    ForeshadowingItem.project_id == chapter.project_id,
+                    ForeshadowingItem.source_chapter_id == chapter.id,
+                    ForeshadowingItem.content == content,
+                )
+                .one_or_none()
+            )
+            if existing is not None:
+                existing.status = status
+                if notes:
+                    existing.notes = str(notes)
+                continue
+
+            session.add(
+                ForeshadowingItem(
+                    project_id=chapter.project_id,
+                    source_chapter_id=chapter.id,
+                    content=content,
+                    status=status,
+                    notes=str(notes) if notes else None,
+                )
+            )
 
 
 def _commit_character_periods(session: Session, chapter: Chapter, task: GenerationTask) -> None:
