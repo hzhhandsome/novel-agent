@@ -5,6 +5,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 import App from "./App";
 import { AgentWorkspace } from "./components/AgentWorkspace";
 import { ChapterEditor } from "./components/ChapterEditor";
+import { ModulePanel } from "./components/ModulePanel";
+import { ProjectCreator } from "./components/ProjectCreator";
 
 function makeProject() {
   return {
@@ -740,5 +742,29 @@ describe("ChapterEditor", () => {
     );
 
     expect(screen.getByLabelText("章节正文")).toBeDisabled();
+  });
+});
+
+describe("ProjectCreator", () => {
+  it("locks the idea input while generation is busy", () => {
+    render(<ProjectCreator idea="废城修书人" busy={true} onIdeaChange={() => undefined} onCreate={() => undefined} />);
+
+    expect(screen.getByLabelText("小说想法")).toBeDisabled();
+  });
+});
+
+describe("ModulePanel", () => {
+  it("locks the inspiration input while generation is busy", () => {
+    render(
+      <ModulePanel
+        project={makeProject()}
+        inspirationText="加入一个新伏笔"
+        busy={true}
+        onInspirationChange={() => undefined}
+        onAddInspiration={() => undefined}
+      />,
+    );
+
+    expect(screen.getByLabelText("作者灵感输入")).toBeDisabled();
   });
 });

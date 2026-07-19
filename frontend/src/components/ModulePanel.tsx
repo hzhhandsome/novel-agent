@@ -74,9 +74,11 @@ export function ModulePanel({
       <details open>
         <summary>作者灵感</summary>
         <textarea
+          aria-label="作者灵感输入"
           className="inspiration-input"
           value={inspirationText}
           onChange={(event) => onInspirationChange(event.target.value)}
+          disabled={busy}
         />
         <button
           className="primary-button"

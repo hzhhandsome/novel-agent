@@ -22,6 +22,7 @@ export function ProjectCreator({ idea, busy, onIdeaChange, onCreate }: ProjectCr
         value={idea}
         onChange={(event) => onIdeaChange(event.target.value)}
         placeholder="一个失忆修书人在废城里修补会改变现实的书"
+        disabled={busy}
       />
       <button className="primary-button" type="submit" disabled={busy || !idea.trim()} title="生成项目">
         <Wand2 size={16} />
