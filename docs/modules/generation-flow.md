@@ -53,6 +53,23 @@
 
 Docker 运行时使用 Qdrant 和本地 `sentence-transformers` embedding；测试和本地默认使用 hash embedding。候选正文和候选摘要不进入检索文档，避免污染正式记忆。
 
+### Tool Calling 第一阶段
+
+`load_context` 和 `judge_foreshadowing` 可以通过内部 `ToolRegistry` 调用项目内工具。第一阶段工具默认只读；涉及记忆更新的工具只能返回候选结果，不得绕过采纳流程写正式记忆。
+
+工具调用结果写入当前节点 `output_snapshot.tool_calls`，字段包括：
+
+- `tool_name`
+- `arguments`
+- `status`
+- `result`
+- `result_summary`
+- `error_type`
+- `error`
+- `duration_ms`
+
+前端 Agent 后台在选中节点详情中展示工具调用摘要。完整参数和结果仍保留在原始节点快照中，方便回看一次生成为什么读取了某些上下文或伏笔。
+
 ### SSE 进度输出
 
 `POST /api/chapters/{chapter_id}/generate/stream` 返回 `text/event-stream`，用于前端实时显示节点进度。
@@ -194,3 +211,4 @@ python -m pytest -v
 - 新增 Prompt 版本记录第一阶段：节点快照写入 `prompt_metadata` / `<node>_prompt_metadata`。
 - 采纳或拒绝后，`GenerationRun.model_usage_snapshot.prompt_versions` 保存本次任务各节点 prompt version 和 hash。
 - Agent 后台流程节点详情会显示选中节点的 Prompt 版本。
+- 新增 Tool Calling 第一阶段：`load_context` 和 `judge_foreshadowing` 通过内部 `ToolRegistry` 读取未回收伏笔，并在节点快照中保存 `tool_calls` 审计记录。

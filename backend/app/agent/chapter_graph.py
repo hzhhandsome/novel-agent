@@ -16,6 +16,7 @@ from app.services.model_provider import ModelProvider
 from app.services.model_usage import estimate_model_usage
 from app.services.prompt_versions import prompt_metadata
 from app.services.provider_factory import get_model_provider_from_snapshot
+from app.services.tool_registry import get_internal_tool_registry
 from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
@@ -70,7 +71,7 @@ def build_chapter_generation_graph(
     )
     workflow.add_node(
         "judge_foreshadowing",
-        _persisted_step(session, "judge_foreshadowing", _judge_foreshadowing(provider, default_model_config)),
+        _persisted_step(session, "judge_foreshadowing", _judge_foreshadowing(session, provider, default_model_config)),
     )
     workflow.add_node(
         "judge_character_period",
@@ -211,6 +212,7 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
             "chapter_id",
             "context",
             "context_package",
+            "tool_calls",
             "chapter_target",
             "prompt_package",
             "prompt_metadata",
@@ -303,6 +305,18 @@ def _load_context(session: Session) -> NodeFn:
             }
             for item in sorted(project.world_rules, key=lambda rule: rule.id, reverse=True)
         ]
+        registry = get_internal_tool_registry(session)
+        tool_calls = [
+            registry.call(
+                "list_open_foreshadowing",
+                {"project_id": project.id},
+                state.get("task_id"),
+                "load_context",
+            )
+        ]
+        tool_foreshadowing = _tool_result_items(tool_calls[0])
+        if tool_foreshadowing is not None:
+            foreshadowing_candidates = tool_foreshadowing
         retrieval_query = _build_retrieval_query(project, chapter, characters, inspirations)
         retrieval_documents = _build_vector_memory_documents(
             project_id=project.id,
@@ -356,6 +370,7 @@ def _load_context(session: Session) -> NodeFn:
                 "retrieval_results": retrieval_results,
                 "context_budget": budgeted["report"],
             },
+            "tool_calls": tool_calls,
         }
 
     return run
@@ -460,6 +475,16 @@ def _retrieve_context(project_id: int, query: str, documents: list[VectorMemoryD
         return retrieve_vector_memory(project_id, query, documents)
     except Exception as exc:
         return {"backend": "unavailable", "query": query, "hits": [], "error": str(exc)}
+
+
+def _tool_result_items(record: dict) -> list[dict] | None:
+    if record.get("status") != "completed":
+        return None
+    result = record.get("result")
+    if not isinstance(result, dict):
+        return None
+    items = result.get("items")
+    return items if isinstance(items, list) else None
 
 
 def _rank_candidates_by_retrieval(candidates: dict[str, list], hits: list[dict]) -> dict[str, list]:
@@ -635,10 +660,21 @@ def _summarize_chapter(provider: ModelProvider, model_config: dict) -> NodeFn:
     return run
 
 
-def _judge_foreshadowing(provider: ModelProvider, model_config: dict) -> NodeFn:
+def _judge_foreshadowing(session: Session, provider: ModelProvider, model_config: dict) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         package = state.get("context_package", {})
-        existing = [str(item.get("content", "")) for item in package.get("foreshadowing_items", [])]
+        registry = get_internal_tool_registry(session)
+        tool_calls = [
+            registry.call(
+                "list_open_foreshadowing",
+                {"project_id": state.get("project_id")},
+                state.get("task_id"),
+                "judge_foreshadowing",
+            )
+        ]
+        tool_items = _tool_result_items(tool_calls[0])
+        existing_items = tool_items if tool_items is not None else package.get("foreshadowing_items", [])
+        existing = [str(item.get("content", "")) for item in existing_items]
         input_text = f"{state.get('context', '')}\n{existing}\n{state.get('generated_content', '')}"
         started = time.perf_counter()
         decisions = provider.judge_foreshadowing(state.get("generated_content", ""), state.get("context", ""), existing)
@@ -646,6 +682,7 @@ def _judge_foreshadowing(provider: ModelProvider, model_config: dict) -> NodeFn:
         normalized = _normalize_decisions(decisions)
         return {
             "foreshadowing_decisions": normalized,
+            "tool_calls": tool_calls,
             "judge_foreshadowing_prompt_metadata": prompt_metadata("judge_foreshadowing", input_text),
             "judge_foreshadowing_model_usage": _usage(
                 "judge_foreshadowing",

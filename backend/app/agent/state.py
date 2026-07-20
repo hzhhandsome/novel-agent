@@ -15,6 +15,7 @@ class ChapterGenerationState(TypedDict, total=False):
     chapter_id: int
     context: str
     context_package: dict
+    tool_calls: list[dict]
     chapter_target: str
     prompt_package: str
     prompt_metadata: dict

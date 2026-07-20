@@ -541,6 +541,15 @@ describe("App", () => {
           error_message: null,
           input_snapshot: { chapter_id: 100 },
           output_snapshot: {
+            tool_calls: [
+              {
+                tool_name: "list_open_foreshadowing",
+                status: "completed",
+                arguments: { project_id: 42 },
+                result_summary: "items=1",
+                duration_ms: 2,
+              },
+            ],
             context_package: {
               positioning: "真实定位",
               worldview: "真实世界观",
@@ -762,6 +771,8 @@ describe("App", () => {
     expect(screen.getByText(/估算 token：520/)).toBeInTheDocument();
     expect(screen.getByText(/估算成本：0.5/)).toBeInTheDocument();
     expect(screen.getByText(/上下文 4200 \/ 6000/)).toBeInTheDocument();
+    expect(screen.getByText("工具调用")).toBeInTheDocument();
+    expect(screen.getByText(/list_open_foreshadowing/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /2.*确认本章线路.*完成/ }));
     expect(screen.getByText("本章线路")).toBeInTheDocument();

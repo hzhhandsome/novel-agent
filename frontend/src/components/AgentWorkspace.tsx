@@ -296,6 +296,27 @@ function formatPromptMetadata(output: Record<string, unknown>): string {
     .join("；");
 }
 
+function formatToolCalls(value: unknown): string {
+  if (!Array.isArray(value)) return "";
+  return value
+    .map((call) => {
+      if (!call || typeof call !== "object" || Array.isArray(call)) return "";
+      const item = call as Record<string, unknown>;
+      return [
+        stringifyValue(item.tool_name),
+        stringifyValue(item.status),
+        stringifyValue(item.arguments),
+        stringifyValue(item.result_summary),
+        stringifyValue(item.error),
+        stringifyValue(item.duration_ms) ? `${stringifyValue(item.duration_ms)}ms` : "",
+      ]
+        .filter(Boolean)
+        .join("；");
+    })
+    .filter(Boolean)
+    .join("\n");
+}
+
 function formatPersistenceResult(value: Record<string, unknown>): string {
   if (!Object.keys(value).length) return "";
   const items = [
@@ -335,6 +356,8 @@ function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[str
   if (usageText) items.push(["模型用量", usageText]);
   const promptText = formatPromptMetadata(output);
   if (promptText) items.push(["Prompt 版本", promptText]);
+  const toolCallText = formatToolCalls(output.tool_calls);
+  if (toolCallText) items.push(["工具调用", toolCallText]);
 
   if (step.name === "load_context") {
     const contextPackage = getNestedRecord(output, "context_package");
