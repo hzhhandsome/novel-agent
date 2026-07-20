@@ -18,6 +18,10 @@ def test_generate_chapter_records_steps_and_generated_content(client_with_db):
     body = response.json()
     assert body["status"] == "completed"
     assert body["chapter"]["generated_content"]
+    trace = body["trace"]
+    assert trace["trace_id"] == f"generation-task-{body['id']}"
+    assert any(event["event_type"] == "llm_call" for event in trace["events"])
+    assert any(event["event_type"] == "tool_call" for event in trace["events"])
     step_names = [step["name"] for step in body["steps"]]
     assert step_names == [
         "load_context",

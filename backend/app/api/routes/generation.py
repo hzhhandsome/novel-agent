@@ -18,6 +18,7 @@ from app.services.chapter_service import (
     stream_chapter_generation_candidate,
 )
 from app.services.provider_factory import get_current_model_config, update_runtime_model_config
+from app.services.trace_builder import build_task_trace
 
 router = APIRouter(tags=["generation"])
 
@@ -121,6 +122,7 @@ def _task_to_dict(task: GenerationTask) -> dict:
         "error_message": task.error_message,
         "model_config_snapshot": task.model_config_snapshot,
         "chapter": _chapter_to_dict(task.chapter) if task.chapter else None,
+        "trace": build_task_trace(task),
         "steps": [
             {
                 "id": step.id,

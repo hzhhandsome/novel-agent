@@ -532,6 +532,42 @@ describe("App", () => {
       error_type: null,
       error_message: null,
       chapter: makeProject().chapters[0],
+      trace: {
+        trace_id: "generation-task-7",
+        root_span_id: "task-7",
+        events: [
+          {
+            span_id: "task-7",
+            parent_span_id: null,
+            event_type: "task",
+            name: "chapter_generation",
+            status: "completed",
+            summary: "chapter_generation completed",
+            duration_ms: 120,
+            metadata: {},
+          },
+          {
+            span_id: "step-4-llm-generate_prose",
+            parent_span_id: "step-4",
+            event_type: "llm_call",
+            name: "generate_prose",
+            status: "completed",
+            summary: "generate_prose: 420 estimated tokens",
+            duration_ms: 50,
+            metadata: { estimated_input_tokens: 120, estimated_output_tokens: 300 },
+          },
+          {
+            span_id: "step-1-tool-0",
+            parent_span_id: "step-1",
+            event_type: "tool_call",
+            name: "list_open_foreshadowing",
+            status: "completed",
+            summary: "items=1",
+            duration_ms: 2,
+            metadata: {},
+          },
+        ],
+      },
       steps: [
         {
           id: 1,
@@ -825,6 +861,12 @@ describe("App", () => {
     expect(screen.getByText(/真实角色更新/)).toBeInTheDocument();
     fireEvent.click(screen.getByText("后续线路变化"));
     expect(screen.getByText(/真实线路调整/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByRole("tab", { name: "Trace" }));
+    expect(screen.getAllByText("Trace").length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/llm_call/)).toBeInTheDocument();
+    expect(screen.getAllByText(/generate_prose/).length).toBeGreaterThanOrEqual(1);
+    expect(screen.getByText(/tool_call/)).toBeInTheDocument();
   });
 
   it("shows structured memory in the module panel and backstage context", async () => {

@@ -1,6 +1,6 @@
 import { AlertCircle, CheckCircle2, ChevronDown, ChevronUp, Circle, LoaderCircle, RefreshCw, XCircle } from "lucide-react";
 import { type MouseEvent, type ReactNode, useMemo, useState } from "react";
-import type { BuiltinEvalReport, GenerationStep, GenerationTask, Project } from "../types";
+import type { BuiltinEvalReport, GenerationStep, GenerationTask, Project, TraceEvent } from "../types";
 
 interface AgentWorkspaceProps {
   project: Project | null;
@@ -14,7 +14,7 @@ interface AgentWorkspaceProps {
   onRunEval: () => void;
 }
 
-type WorkspaceTab = "flow" | "context" | "result";
+type WorkspaceTab = "flow" | "context" | "result" | "trace";
 type FlowKey =
   | "load_context"
   | "build_chapter_target"
@@ -317,6 +317,23 @@ function formatToolCalls(value: unknown): string {
     .join("\n");
 }
 
+function formatTraceMetadata(event: TraceEvent): string {
+  const metadata = event.metadata ?? {};
+  const items = [
+    metadata.model ? `model=${stringifyValue(metadata.model)}` : "",
+    metadata.route ? `route=${stringifyValue(metadata.route)}` : "",
+    metadata.estimated_input_tokens || metadata.estimated_output_tokens
+      ? `token=${Number(metadata.estimated_input_tokens ?? 0) + Number(metadata.estimated_output_tokens ?? 0)}`
+      : "",
+    metadata.query ? `query=${stringifyValue(metadata.query)}` : "",
+    metadata.hit_count !== undefined ? `hits=${stringifyValue(metadata.hit_count)}` : "",
+    metadata.tool_name ? `tool=${stringifyValue(metadata.tool_name)}` : "",
+    metadata.error_message ? `error=${stringifyValue(metadata.error_message)}` : "",
+    metadata.error ? `error=${stringifyValue(metadata.error)}` : "",
+  ];
+  return items.filter(Boolean).join("；");
+}
+
 function formatPersistenceResult(value: Record<string, unknown>): string {
   if (!Object.keys(value).length) return "";
   const items = [
@@ -506,6 +523,7 @@ export function AgentWorkspace({
   const futurePlanResult = getNestedRecord(candidateResult, "future_plan");
   const persistenceResult = getOutput(task, "persist_candidate_result").persistence_result;
   const usageSummary = modelUsageSummary(task);
+  const traceEvents = task?.trace?.events ?? [];
 
   function handleRunEval() {
     setActiveTab("result");
@@ -648,6 +666,15 @@ export function AgentWorkspace({
         >
           结果与更新
         </button>
+        <button
+          className={activeTab === "trace" ? "tab-button active" : "tab-button"}
+          type="button"
+          role="tab"
+          aria-selected={activeTab === "trace"}
+          onClick={() => setActiveTab("trace")}
+        >
+          Trace
+        </button>
       </div>
 
       {activeTab === "flow" ? (
@@ -767,6 +794,40 @@ export function AgentWorkspace({
           <ResultCard title="入库动作" summary="已自动写入" pill="完成" className="weak">
             <p>{stringifyValue(persistenceResult) || "正文、摘要、角色卡更新、伏笔更新和后续线路调整写入正式上下文；生成记录保留。"}</p>
           </ResultCard>
+        </div>
+      ) : null}
+
+      {activeTab === "trace" ? (
+        <div className="result-list">
+          <article className="result-card eval-report-card">
+            <header className="eval-report-header">
+              <div>
+                <strong>Trace</strong>
+                <span>{task?.trace?.trace_id ?? "尚未生成 trace"}</span>
+              </div>
+              <span className="status-pill">{traceEvents.length} events</span>
+            </header>
+          </article>
+          {traceEvents.map((event) => {
+            const metadataText = formatTraceMetadata(event);
+            return (
+              <article className="dark-card" key={event.span_id}>
+                <h3>
+                  {event.event_type} · {event.name}
+                </h3>
+                <p>{event.summary || event.status}</p>
+                <p>
+                  {[
+                    `status=${event.status}`,
+                    event.duration_ms !== null ? `${event.duration_ms}ms` : "",
+                    metadataText,
+                  ]
+                    .filter(Boolean)
+                    .join("；")}
+                </p>
+              </article>
+            );
+          })}
         </div>
       ) : null}
       </>

@@ -84,6 +84,23 @@ export interface GenerationStep {
   error_message: string | null;
 }
 
+export interface TraceEvent {
+  span_id: string;
+  parent_span_id: string | null;
+  event_type: string;
+  name: string;
+  status: string;
+  summary: string;
+  duration_ms: number | null;
+  metadata: Record<string, unknown>;
+}
+
+export interface TaskTrace {
+  trace_id: string;
+  root_span_id: string;
+  events: TraceEvent[];
+}
+
 export interface GenerationTask {
   id: number;
   project_id: number;
@@ -95,6 +112,7 @@ export interface GenerationTask {
   error_message: string | null;
   model_config_snapshot?: Record<string, unknown> | null;
   chapter: Chapter | null;
+  trace?: TaskTrace | null;
   steps: GenerationStep[];
 }
 
