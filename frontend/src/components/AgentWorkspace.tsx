@@ -278,6 +278,24 @@ function formatPromptSummary(value: unknown): string {
   return text.length > 360 ? `${text.slice(0, 360)}...` : text;
 }
 
+function formatPromptMetadata(output: Record<string, unknown>): string {
+  const direct = output.prompt_metadata;
+  const metadata =
+    direct && typeof direct === "object" && !Array.isArray(direct)
+      ? (direct as Record<string, unknown>)
+      : Object.entries(output)
+          .filter(([key, value]) => key.endsWith("_prompt_metadata") && value && typeof value === "object" && !Array.isArray(value))
+          .map(([, value]) => value as Record<string, unknown>)[0];
+  if (!metadata) return "";
+  return [
+    stringifyValue(metadata.prompt_version),
+    stringifyValue(metadata.context_builder_version),
+    stringifyValue(metadata.prompt_hash),
+  ]
+    .filter(Boolean)
+    .join("；");
+}
+
 function formatPersistenceResult(value: Record<string, unknown>): string {
   if (!Object.keys(value).length) return "";
   const items = [
@@ -315,6 +333,8 @@ function stepHighlights(step: GenerationStep | null, node: FlowNode): Array<[str
   const items: Array<[string, string]> = [["节点状态", stepStatusText(step.status)]];
   const usageText = formatModelUsageFromOutput(output);
   if (usageText) items.push(["模型用量", usageText]);
+  const promptText = formatPromptMetadata(output);
+  if (promptText) items.push(["Prompt 版本", promptText]);
 
   if (step.name === "load_context") {
     const contextPackage = getNestedRecord(output, "context_package");
@@ -681,6 +701,9 @@ export function AgentWorkspace({
                 <span>审核冲突检出率 {formatEvalPercent(evalReport.audit.average_recall_rate)}</span>
                 {evalReport.rag ? <span>RAG 召回率 {formatEvalPercent(evalReport.rag.average_recall_at_k)}</span> : null}
                 {evalReport.rag ? <span>RAG MRR {formatEvalPercent(evalReport.rag.average_mrr)}</span> : null}
+                {evalReport.prompt_versions?.groups[0] ? (
+                  <span>Prompt 版本 {evalReport.prompt_versions.groups[0].prompt_version}</span>
+                ) : null}
               </div>
               <p>{evalCaseSummary(evalReport)}</p>
             </article>

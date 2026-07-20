@@ -33,6 +33,14 @@ def test_generate_chapter_records_steps_and_generated_content(client_with_db):
     ]
     assert step_names.index("audit_prose") < step_names.index("summarize_chapter")
     assert all(step["output_snapshot"] for step in body["steps"])
+    prompt_step = next(step for step in body["steps"] if step["name"] == "build_prompt_package")
+    generate_step = next(step for step in body["steps"] if step["name"] == "generate_prose")
+    audit_step = next(step for step in body["steps"] if step["name"] == "audit_prose")
+
+    assert prompt_step["output_snapshot"]["prompt_metadata"]["prompt_version"].startswith("build_prompt_package@")
+    assert generate_step["output_snapshot"]["generate_prose_prompt_metadata"]["prompt_version"].startswith("generate_prose@")
+    assert audit_step["output_snapshot"]["audit_prose_prompt_metadata"]["prompt_version"].startswith("audit_prose@")
+    assert len(generate_step["output_snapshot"]["generate_prose_prompt_metadata"]["prompt_hash"]) == 64
 
     candidate_step = next(step for step in body["steps"] if step["name"] == "build_candidate_result")
     candidate = candidate_step["output_snapshot"]["candidate_result"]

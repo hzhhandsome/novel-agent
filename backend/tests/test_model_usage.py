@@ -61,3 +61,7 @@ def test_generation_records_node_usage_and_run_aggregate(client_with_db):
     assert run.model_usage_snapshot["estimated_input_tokens"] > 0
     assert run.model_usage_snapshot["estimated_output_tokens"] > 0
     assert len(run.model_usage_snapshot["calls"]) >= 3
+    prompt_versions = run.model_usage_snapshot["prompt_versions"]
+    assert prompt_versions["nodes"]["generate_prose"]["prompt_version"].startswith("generate_prose@")
+    assert prompt_versions["nodes"]["audit_prose"]["prompt_version"].startswith("audit_prose@")
+    assert prompt_versions["context_builder_version"].startswith("context_builder@")

@@ -12,6 +12,7 @@ from app.models.generation import GenerationRun, GenerationTask, GenerationTaskS
 from app.models.memory import StoryEvent, WorldRule
 from app.services.model_provider import ModelProvider
 from app.services.model_usage import aggregate_model_usage
+from app.services.prompt_versions import collect_prompt_versions
 from app.services.provider_factory import get_model_config_snapshot, get_model_provider_from_snapshot
 
 
@@ -351,6 +352,7 @@ def _record_generation_run(session: Session, chapter_id: int, accepted: bool) ->
     prompt_package = None
     review_result = None
     model_usage_snapshot = aggregate_model_usage([step.output_snapshot for step in task.steps])
+    model_usage_snapshot["prompt_versions"] = collect_prompt_versions([step.output_snapshot for step in task.steps])
     for step in task.steps:
         if step.name == "build_prompt_package" and step.output_snapshot:
             prompt_package = step.output_snapshot.get("prompt_package")

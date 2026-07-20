@@ -48,6 +48,10 @@ python -m app.evals.run
 - `rag.average_mrr`
 - `overall.case_count`
 - `overall.passed_count`
+- `prompt_versions.case_count`
+- `prompt_versions.groups[].prompt_version`
+- `prompt_versions.groups[].case_count`
+- `prompt_versions.groups[].passed_count`
 - 每个 case 的 `retained` / `missing` 或 `detected` / `missed`
 
 RAG Eval 第一阶段只使用内置固定 retrieval report，不读取真实项目数据库，也不直接调用 Qdrant。这样指标稳定、可重复，适合比较后续 query 构造、chunk 策略、混合检索和 reranker 改动。
@@ -84,6 +88,7 @@ python -m app.evals.run
 - gold case 要保持小而稳定，避免为了让当前模型“好看”而频繁改答案。
 - 新增模型、prompt 或 RAG 策略后，应优先复用同一批 gold case 做对比。
 - 当前是确定性文本匹配，不能声称已经有完整语义评测；语义匹配和 LLM judge 应作为后续增强。
+- 修改内置 Eval prompt 或评测规则时，必须同步更新 `builtin_eval` prompt version，避免不同规则下的结果混在同一版本里。
 
 ## 前端/API 入口
 
@@ -109,3 +114,4 @@ GET /api/evals/builtin
 - `python -m app.evals.run` 和 `GET /api/evals/builtin` 均返回 `rag` 聚合结果。
 - 前端 Agent 后台“运行 Eval”后会展示 RAG 召回率和 RAG MRR。
 - 当前 RAG Eval 使用固定 retrieval report，后续再接真实检索日志和策略对比。
+- 新增 `prompt_versions` 聚合，内置 Eval 结果会按 `builtin_eval@2026-07-20.v1` 分组，后续可用于比较不同 prompt/rubric 版本。

@@ -470,6 +470,10 @@ describe("App", () => {
                   },
                 ],
               },
+              prompt_versions: {
+                case_count: 5,
+                groups: [{ prompt_version: "builtin_eval@2026-07-20.v1", case_count: 5, passed_count: 3 }],
+              },
               overall: { case_count: 5, passed_count: 3 },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
@@ -494,6 +498,7 @@ describe("App", () => {
     expect(screen.getByText("审核冲突检出率 50%")).toBeInTheDocument();
     expect(screen.getByText("RAG 召回率 100%")).toBeInTheDocument();
     expect(screen.getByText("RAG MRR 100%")).toBeInTheDocument();
+    expect(screen.getByText("Prompt 版本 builtin_eval@2026-07-20.v1")).toBeInTheDocument();
     expect(screen.getByText(/summary_case_1/)).toBeInTheDocument();
     expect(screen.getByText(/伏笔提前泄露/)).toBeInTheDocument();
   });
@@ -602,6 +607,12 @@ describe("App", () => {
           },
           output_snapshot: {
             prompt_package: "真实提示包：目标、限制、角色状态、伏笔。",
+            prompt_metadata: {
+              prompt_template: "build_prompt_package",
+              prompt_version: "build_prompt_package@2026-07-20.v1",
+              prompt_hash: "abc123",
+              context_builder_version: "context_builder@2026-07-20.v1",
+            },
           },
         },
         {
@@ -759,6 +770,8 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: /3.*生成本章提示包.*完成/ }));
     expect(screen.getByText("提示包摘要")).toBeInTheDocument();
     expect(screen.getByText(/真实提示包/)).toBeInTheDocument();
+    expect(screen.getByText("Prompt 版本")).toBeInTheDocument();
+    expect(screen.getByText(/build_prompt_package@2026-07-20.v1/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("button", { name: /4.*生成章节正文.*完成/ }));
     expect(screen.getByText("模型用量")).toBeInTheDocument();

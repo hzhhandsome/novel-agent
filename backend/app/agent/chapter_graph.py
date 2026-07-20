@@ -14,6 +14,7 @@ from app.models.generation import GenerationTask, GenerationTaskStatus, Generati
 from app.models.review import ReviewFinding
 from app.services.model_provider import ModelProvider
 from app.services.model_usage import estimate_model_usage
+from app.services.prompt_versions import prompt_metadata
 from app.services.provider_factory import get_model_provider_from_snapshot
 from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
 
@@ -212,6 +213,7 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
             "context_package",
             "chapter_target",
             "prompt_package",
+            "prompt_metadata",
             "generated_content",
             "draft_summary",
             "review_findings",
@@ -221,6 +223,12 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
             "generation_model_config",
             "audit_model_config",
             "summary_model_config",
+            "generate_prose_prompt_metadata",
+            "audit_prose_prompt_metadata",
+            "summarize_chapter_prompt_metadata",
+            "judge_foreshadowing_prompt_metadata",
+            "judge_character_period_prompt_metadata",
+            "propose_future_plan_updates_prompt_metadata",
             "generate_prose_model_usage",
             "audit_prose_model_usage",
             "summarize_chapter_model_usage",
@@ -540,7 +548,7 @@ def _build_prompt_package(state: ChapterGenerationState) -> ChapterGenerationSta
             "要求：生成完整单章草稿，避免提前泄露伏笔。",
         ]
     )
-    return {"prompt_package": prompt_package}
+    return {"prompt_package": prompt_package, "prompt_metadata": prompt_metadata("build_prompt_package", prompt_package)}
 
 
 def _generate_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
@@ -552,6 +560,7 @@ def _generate_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
             "generated_content": result.content,
             "draft_summary": result.summary,
             "generation_model_config": model_config,
+            "generate_prose_prompt_metadata": prompt_metadata("generate_prose", state["prompt_package"]),
             "generate_prose_model_usage": _usage(
                 "generate_prose",
                 "generation",
@@ -586,6 +595,7 @@ def _audit_prose(provider: ModelProvider, model_config: dict) -> NodeFn:
             "review_findings": serialized,
             "audit_result": {"findings": serialized, "blocking": any(item["blocking"] for item in serialized)},
             "audit_model_config": model_config,
+            "audit_prose_prompt_metadata": prompt_metadata("audit_prose", input_text),
             "audit_prose_model_usage": _usage(
                 "audit_prose",
                 "audit",
@@ -608,6 +618,10 @@ def _summarize_chapter(provider: ModelProvider, model_config: dict) -> NodeFn:
             "summary": summary,
             "summary_result": {"summary": summary, "source": "post_audit"},
             "summary_model_config": model_config,
+            "summarize_chapter_prompt_metadata": prompt_metadata(
+                "summarize_chapter",
+                state.get("generated_content", ""),
+            ),
             "summarize_chapter_model_usage": _usage(
                 "summarize_chapter",
                 "summary",
@@ -632,6 +646,7 @@ def _judge_foreshadowing(provider: ModelProvider, model_config: dict) -> NodeFn:
         normalized = _normalize_decisions(decisions)
         return {
             "foreshadowing_decisions": normalized,
+            "judge_foreshadowing_prompt_metadata": prompt_metadata("judge_foreshadowing", input_text),
             "judge_foreshadowing_model_usage": _usage(
                 "judge_foreshadowing",
                 "default",
@@ -677,6 +692,7 @@ def _judge_character_period(provider: ModelProvider, model_config: dict) -> Node
         normalized = _normalize_decisions(decisions)
         return {
             "character_period_decisions": normalized,
+            "judge_character_period_prompt_metadata": prompt_metadata("judge_character_period", input_text),
             "judge_character_period_model_usage": _usage(
                 "judge_character_period",
                 "default",
@@ -701,6 +717,7 @@ def _propose_future_plan_updates(provider: ModelProvider, model_config: dict) ->
         normalized = _normalize_decisions(updates)
         return {
             "future_plan_updates": normalized,
+            "propose_future_plan_updates_prompt_metadata": prompt_metadata("propose_future_plan_updates", input_text),
             "propose_future_plan_updates_model_usage": _usage(
                 "propose_future_plan_updates",
                 "default",

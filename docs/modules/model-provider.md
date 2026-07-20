@@ -85,6 +85,13 @@ API key 仍只保存在运行时内存中，不返回前端，也不写入默认
 - `GenerationRun.model_usage_snapshot` 在采纳或拒绝候选时保存本次任务聚合 usage。
 - 前端 Agent 后台展示当前任务估算 token、估算成本和耗时。
 
+同一批模型调用节点也会记录 prompt 版本元数据：
+
+- `<node>_prompt_metadata`：记录该节点实际输入对应的 prompt template、prompt version、prompt hash 和 context builder version。
+- `GenerationRun.model_usage_snapshot.prompt_versions`：聚合一次生成任务中各节点 prompt 版本。
+
+第一阶段 prompt 版本信息保存在现有 JSON 快照中，不新增独立 prompt 表，也不改变 provider 接口。
+
 估算 token 当前使用确定性字符启发式，不依赖外部 tokenizer。成本单价通过环境变量配置，默认 0：
 
 - `NOVEL_AGENT_MODEL_INPUT_COST_PER_1K`
@@ -101,6 +108,7 @@ API key 仍只保存在运行时内存中，不返回前端，也不写入默认
 - 节点级模型配置已经覆盖正文生成、审核和摘要三类 P0 路由；更多节点路由可后续扩展。
 - 模型调用成本和耗时已经支持第一阶段估算记录；真实 provider usage 和更细价格表可后续扩展。
 - 温度、最大 token、超时和重试策略。
+- 独立 prompt 模板管理、版本 diff 和按 prompt version 的历史质量报表。
 
 LLM 平滑切换第一阶段已经支持全局切换：新任务使用新模型，已开始任务继续使用创建任务时记录的模型配置快照。
 
@@ -125,9 +133,15 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 - 新增模型配置时必须更新 `.env.example`，但不能写真实密钥。
 - 如果模型响应结构改变，优先在 provider 层解析和校验，不把不稳定格式泄漏到 LangGraph 节点。
 - 不要把 API key 明文写入 `GenerationTask.model_config_snapshot` 或 `GenerationRun.model_config_snapshot`。
+- 修改模型调用节点 prompt 输入时，必须同步更新 `backend/app/services/prompt_versions.py` 中的版本号和对应测试。
 
 ## 2026-07-19 更新
 
 - “模型最大 token”表示一次模型调用中输入和输出共享的窗口上限。
 - “上下文预算”是系统主动分配给长期记忆、摘要、伏笔、灵感等上下文的预算，应小于模型最大 token，并为系统提示、本章目标和正文输出预留空间。
 - Agent 后台顶部显示的上下文占用来自 `load_context.context_budget`，用于观察上下文是否接近预算上限；当前仍是粗略估算，不等同于 provider 返回的真实 tokenizer 计数。
+
+## 2026-07-20 更新
+
+- 模型调用节点新增 `<node>_prompt_metadata`，用于回看本次调用使用的 prompt version、hash 和 context builder version。
+- 采纳/拒绝生成记录会在 `model_usage_snapshot.prompt_versions` 中保存各节点 prompt 版本聚合。
