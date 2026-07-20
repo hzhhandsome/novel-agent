@@ -14,6 +14,7 @@ PROMPT_TEMPLATE_VERSIONS = {
     "judge_character_period": "judge_character_period@2026-07-20.v1",
     "propose_future_plan_updates": "propose_future_plan_updates@2026-07-20.v1",
     "builtin_eval": "builtin_eval@2026-07-20.v1",
+    "llm_judge_eval": "llm_judge_eval@2026-07-20.v1",
 }
 
 

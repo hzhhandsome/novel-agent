@@ -99,6 +99,34 @@ def evaluate_rag_retrieval(
     }
 
 
+def evaluate_llm_judge_result(
+    case_id: str,
+    case_name: str,
+    scores: dict[str, Any],
+    blocking_findings: list[str],
+    reason: str,
+    threshold: float = 0.75,
+) -> dict[str, Any]:
+    normalized_scores = {
+        "consistency": _score_value(scores.get("consistency")),
+        "character": _score_value(scores.get("character")),
+        "foreshadowing": _score_value(scores.get("foreshadowing")),
+        "style": _score_value(scores.get("style")),
+    }
+    average_score = round(sum(normalized_scores.values()) / len(normalized_scores), 6)
+    return {
+        "metric": "llm_judge",
+        "case_id": case_id,
+        "case": case_name,
+        "scores": normalized_scores,
+        "average_score": average_score,
+        "blocking_findings": [str(item) for item in blocking_findings],
+        "reason": reason,
+        "threshold": threshold,
+        "passed": average_score >= threshold and not blocking_findings,
+    }
+
+
 def _partition_expected_items(text: str, expected_items: list[ExpectedItem]) -> tuple[list[ExpectedItem], list[ExpectedItem]]:
     detected: list[ExpectedItem] = []
     missing: list[ExpectedItem] = []
@@ -128,3 +156,11 @@ def _round_rate(count: int, total: int) -> float:
     if total == 0:
         return 1.0
     return round(count / total, 6)
+
+
+def _score_value(value: Any) -> float:
+    try:
+        score = float(value)
+    except (TypeError, ValueError):
+        return 0.0
+    return max(0.0, min(1.0, round(score, 6)))

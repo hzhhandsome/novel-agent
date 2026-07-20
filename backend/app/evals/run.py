@@ -4,16 +4,20 @@ import json
 from typing import Any
 
 from app.evals.gold_cases import AUDIT_CONFLICT_CASES, SUMMARY_FACT_CASES
+from app.evals.judge_cases import JUDGE_EVAL_CASES
 from app.evals.rag_cases import RAG_RETRIEVAL_CASES
 from app.services.evaluation import (
     evaluate_audit_conflict_detection,
+    evaluate_llm_judge_result,
     evaluate_rag_retrieval,
     evaluate_summary_fact_retention,
 )
+from app.services.provider_factory import get_model_provider
 from app.services.prompt_versions import PROMPT_TEMPLATE_VERSIONS
 
 
 def run_builtin_evals() -> dict[str, Any]:
+    provider = get_model_provider()
     summary_results = [
         {
             "case": case.name,
@@ -43,6 +47,26 @@ def run_builtin_evals() -> dict[str, Any]:
         }
         for case in RAG_RETRIEVAL_CASES
     ]
+    judge_results = []
+    for case in JUDGE_EVAL_CASES:
+        judge_result = provider.judge_eval_case(
+            input_text=case.input_text,
+            context=case.context,
+            rubric=case.rubric,
+        )
+        judge_results.append(
+            {
+                "prompt_version": PROMPT_TEMPLATE_VERSIONS["llm_judge_eval"],
+                **evaluate_llm_judge_result(
+                    case_id=case.case_id,
+                    case_name=case.name,
+                    scores=judge_result.scores,
+                    blocking_findings=judge_result.blocking_findings,
+                    reason=judge_result.reason,
+                    threshold=case.threshold,
+                ),
+            }
+        )
     return {
         "summary": {
             "case_count": len(summary_results),
@@ -65,11 +89,19 @@ def run_builtin_evals() -> dict[str, Any]:
             "passed_count": sum(1 for item in rag_results if item["passed"]),
             "cases": rag_results,
         },
-        "overall": {
-            "case_count": len(summary_results) + len(audit_results) + len(rag_results),
-            "passed_count": sum(1 for item in summary_results + audit_results + rag_results if item["passed"]),
+        "judge": {
+            "case_count": len(judge_results),
+            "average_score": _average(item["average_score"] for item in judge_results),
+            "passed_count": sum(1 for item in judge_results if item["passed"]),
+            "cases": judge_results,
         },
-        "prompt_versions": _prompt_version_groups(summary_results + audit_results + rag_results),
+        "overall": {
+            "case_count": len(summary_results) + len(audit_results) + len(rag_results) + len(judge_results),
+            "passed_count": sum(
+                1 for item in summary_results + audit_results + rag_results + judge_results if item["passed"]
+            ),
+        },
+        "prompt_versions": _prompt_version_groups(summary_results + audit_results + rag_results + judge_results),
     }
 
 

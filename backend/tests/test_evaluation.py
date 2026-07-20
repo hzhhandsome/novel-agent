@@ -2,6 +2,7 @@ from app.services.evaluation import (
     ExpectedItem,
     ExpectedRetrievedDocument,
     evaluate_audit_conflict_detection,
+    evaluate_llm_judge_result,
     evaluate_rag_retrieval,
     evaluate_summary_fact_retention,
 )
@@ -77,6 +78,24 @@ def test_rag_retrieval_eval_reports_recall_precision_hit_rate_and_mrr():
     assert result["passed"] is True
 
 
+def test_llm_judge_eval_aggregates_scores_and_blocking_findings():
+    result = evaluate_llm_judge_result(
+        case_id="character_drift",
+        case_name="角色动机偏离",
+        scores={"consistency": 0.8, "character": 0.6, "foreshadowing": 1.0, "style": 0.8},
+        blocking_findings=["主角突然放弃核心目标"],
+        reason="人物动机偏离。",
+        threshold=0.75,
+    )
+
+    assert result["metric"] == "llm_judge"
+    assert result["case_id"] == "character_drift"
+    assert result["case"] == "角色动机偏离"
+    assert result["average_score"] == 0.8
+    assert result["passed"] is False
+    assert result["blocking_findings"] == ["主角突然放弃核心目标"]
+
+
 def test_builtin_eval_runner_returns_aggregate_metrics():
     from app.evals.run import run_builtin_evals
 
@@ -89,8 +108,13 @@ def test_builtin_eval_runner_returns_aggregate_metrics():
     assert report["rag"]["case_count"] >= 1
     assert report["rag"]["average_recall_at_k"] > 0
     assert report["rag"]["average_mrr"] > 0
+    assert report["judge"]["case_count"] >= 1
+    assert report["judge"]["average_score"] > 0
     assert report["overall"]["case_count"] == (
-        report["summary"]["case_count"] + report["audit"]["case_count"] + report["rag"]["case_count"]
+        report["summary"]["case_count"]
+        + report["audit"]["case_count"]
+        + report["rag"]["case_count"]
+        + report["judge"]["case_count"]
     )
 
 
@@ -104,6 +128,11 @@ def test_builtin_eval_api_returns_report(client_with_db):
     assert report["rag"]["case_count"] >= 1
     assert report["rag"]["average_recall_at_k"] > 0
     assert report["rag"]["average_mrr"] > 0
+    assert report["judge"]["case_count"] >= 1
+    assert report["judge"]["average_score"] > 0
     assert report["overall"]["case_count"] == (
-        report["summary"]["case_count"] + report["audit"]["case_count"] + report["rag"]["case_count"]
+        report["summary"]["case_count"]
+        + report["audit"]["case_count"]
+        + report["rag"]["case_count"]
+        + report["judge"]["case_count"]
     )

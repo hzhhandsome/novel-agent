@@ -246,10 +246,15 @@ function evalCaseSummary(report: BuiltinEvalReport | null): string {
   const failedCases = [...report.summary.cases, ...report.audit.cases, ...(report.rag?.cases ?? [])].filter(
     (item) => !item.passed,
   );
+  const judgeFailedCases = (report.judge?.cases ?? []).filter((item) => !item.passed);
+  failedCases.push(...judgeFailedCases);
   if (failedCases.length === 0) return "所有内置样例通过";
   return failedCases
     .map((item) => {
-      const missed = [...(item.missing ?? []), ...(item.missed ?? [])].join("、") || "无";
+      const missed =
+        [...(item.missing ?? []), ...(item.missed ?? []), ...(item.blocking_findings ?? [])].join("、") ||
+        item.reason ||
+        "无";
       return `${item.case_id ?? item.case ?? "unknown_case"}：遗漏 ${missed}`;
     })
     .join("；");
@@ -751,6 +756,12 @@ export function AgentWorkspace({
                 <span>审核冲突检出率 {formatEvalPercent(evalReport.audit.average_recall_rate)}</span>
                 {evalReport.rag ? <span>RAG 召回率 {formatEvalPercent(evalReport.rag.average_recall_at_k)}</span> : null}
                 {evalReport.rag ? <span>RAG MRR {formatEvalPercent(evalReport.rag.average_mrr)}</span> : null}
+                {evalReport.judge ? <span>Judge 语义分 {formatEvalPercent(evalReport.judge.average_score)}</span> : null}
+                {evalReport.judge ? (
+                  <span>
+                    Judge 通过 {evalReport.judge.passed_count} / {evalReport.judge.case_count}
+                  </span>
+                ) : null}
                 {evalReport.prompt_versions?.groups[0] ? (
                   <span>Prompt 版本 {evalReport.prompt_versions.groups[0].prompt_version}</span>
                 ) : null}

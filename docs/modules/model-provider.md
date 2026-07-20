@@ -46,8 +46,15 @@
 - `generate_chapter(prompt_package)`
 - `review_chapter(content, prompt_package)`
 - `summarize_chapter(content)`
+- `judge_foreshadowing(content, context, existing_items)`
+- `judge_character_period(content, context, characters)`
+- `propose_future_plan_updates(content, context, chapters)`
+- `review_user_input(input_kind, content, context)`
+- `judge_eval_case(input_text, context, rubric)`
 
 返回值必须是结构化 dataclass，业务层不直接解析模型原始响应。
+
+`judge_eval_case` 只用于离线 Eval，不进入章节生成 11 节点流程。它返回 `JudgeEvalResult`，包含 `scores`、`blocking_findings` 和 `reason`，由 Eval 模块再计算平均分和通过状态。
 
 ## LLM 平滑切换
 
@@ -134,6 +141,7 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 - 如果模型响应结构改变，优先在 provider 层解析和校验，不把不稳定格式泄漏到 LangGraph 节点。
 - 不要把 API key 明文写入 `GenerationTask.model_config_snapshot` 或 `GenerationRun.model_config_snapshot`。
 - 修改模型调用节点 prompt 输入时，必须同步更新 `backend/app/services/prompt_versions.py` 中的版本号和对应测试。
+- 修改 LLM-as-judge rubric 或输出结构时，必须同步更新 `llm_judge_eval` prompt version 和 provider 解析测试。
 
 ## 2026-07-19 更新
 
@@ -145,3 +153,4 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 
 - 模型调用节点新增 `<node>_prompt_metadata`，用于回看本次调用使用的 prompt version、hash 和 context builder version。
 - 采纳/拒绝生成记录会在 `model_usage_snapshot.prompt_versions` 中保存各节点 prompt 版本聚合。
+- 新增 `judge_eval_case` provider 方法，供内置 Eval 执行轻量 LLM-as-judge 语义评测。

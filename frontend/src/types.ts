@@ -141,6 +141,10 @@ export interface EvalCaseResult {
   missing?: string[];
   detected?: string[];
   missed?: string[];
+  average_score?: number;
+  blocking_findings?: string[];
+  reason?: string;
+  scores?: Record<string, number>;
 }
 
 export interface EvalMetricReport {
@@ -165,6 +169,9 @@ export interface BuiltinEvalReport {
     average_precision_at_k?: number;
     average_hit_rate_at_k?: number;
     average_mrr?: number;
+  };
+  judge?: EvalMetricReport & {
+    average_score?: number;
   };
   prompt_versions?: {
     case_count: number;

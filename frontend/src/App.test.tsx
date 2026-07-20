@@ -470,11 +470,26 @@ describe("App", () => {
                   },
                 ],
               },
+              judge: {
+                case_count: 1,
+                average_score: 0.8,
+                passed_count: 0,
+                cases: [
+                  {
+                    case_id: "judge_case_1",
+                    case: "语义评测样例",
+                    passed: false,
+                    average_score: 0.8,
+                    blocking_findings: ["主角动机偏离"],
+                    reason: "角色目标变化缺少铺垫。",
+                  },
+                ],
+              },
               prompt_versions: {
-                case_count: 5,
+                case_count: 6,
                 groups: [{ prompt_version: "builtin_eval@2026-07-20.v1", case_count: 5, passed_count: 3 }],
               },
-              overall: { case_count: 5, passed_count: 3 },
+              overall: { case_count: 6, passed_count: 3 },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -493,14 +508,18 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "运行 Eval" }));
 
     expect(await screen.findByText("Eval 评测")).toBeInTheDocument();
-    expect(screen.getByText("通过 3 / 5")).toBeInTheDocument();
+    expect(screen.getByText("通过 3 / 6")).toBeInTheDocument();
     expect(screen.getByText("摘要事实保留率 75%")).toBeInTheDocument();
     expect(screen.getByText("审核冲突检出率 50%")).toBeInTheDocument();
     expect(screen.getByText("RAG 召回率 100%")).toBeInTheDocument();
     expect(screen.getByText("RAG MRR 100%")).toBeInTheDocument();
+    expect(screen.getByText("Judge 语义分 80%")).toBeInTheDocument();
+    expect(screen.getByText("Judge 通过 0 / 1")).toBeInTheDocument();
     expect(screen.getByText("Prompt 版本 builtin_eval@2026-07-20.v1")).toBeInTheDocument();
     expect(screen.getByText(/summary_case_1/)).toBeInTheDocument();
     expect(screen.getByText(/伏笔提前泄露/)).toBeInTheDocument();
+    expect(screen.getByText(/judge_case_1/)).toBeInTheDocument();
+    expect(screen.getByText(/主角动机偏离/)).toBeInTheDocument();
   });
 
   it("switches the backstage detail when a flow node is clicked", async () => {

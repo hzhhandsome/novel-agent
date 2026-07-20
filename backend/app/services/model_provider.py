@@ -63,6 +63,13 @@ class UserInputReviewResult:
     suggestions: list[str]
 
 
+@dataclass(frozen=True)
+class JudgeEvalResult:
+    scores: dict[str, float]
+    blocking_findings: list[str]
+    reason: str
+
+
 class ModelProvider(Protocol):
     def generate_project_setup(self, idea: str) -> ProjectSetupResult:
         raise NotImplementedError
@@ -86,6 +93,9 @@ class ModelProvider(Protocol):
         raise NotImplementedError
 
     def review_user_input(self, input_kind: str, content: str, context: str) -> UserInputReviewResult:
+        raise NotImplementedError
+
+    def judge_eval_case(self, input_text: str, context: str, rubric: str) -> JudgeEvalResult:
         raise NotImplementedError
 
 
@@ -232,6 +242,28 @@ class DeepSeekAnthropicProvider:
             decision=decision,
             reason=str(payload.get("reason", "")),
             suggestions=[str(item) for item in payload.get("suggestions", [])],
+        )
+
+    def judge_eval_case(self, input_text: str, context: str, rubric: str) -> JudgeEvalResult:
+        payload = self._call_json(
+            system="你是小说 Agent 评测裁判。只输出合法 JSON，不要输出 Markdown。",
+            user=(
+                "根据 rubric 评测输入文本的语义质量。"
+                "JSON 字段必须包含 scores, blocking_findings, reason。"
+                "scores 必须包含 consistency, character, foreshadowing, style，取值 0 到 1。"
+                f"\n上下文：{context}\nRubric：{rubric}\n输入文本：{input_text}"
+            ),
+        )
+        scores_payload = payload.get("scores") if isinstance(payload.get("scores"), dict) else {}
+        return JudgeEvalResult(
+            scores={
+                "consistency": float(scores_payload.get("consistency", 0)),
+                "character": float(scores_payload.get("character", 0)),
+                "foreshadowing": float(scores_payload.get("foreshadowing", 0)),
+                "style": float(scores_payload.get("style", 0)),
+            },
+            blocking_findings=[str(item) for item in payload.get("blocking_findings", [])],
+            reason=str(payload.get("reason", "")),
         )
 
     def _call_json(self, system: str, user: str) -> dict[str, Any]:
@@ -403,4 +435,22 @@ class MockModelProvider:
             decision="pass",
             reason="输入与当前创作方向兼容，可以进入后续上下文。",
             suggestions=[],
+        )
+
+    def judge_eval_case(self, input_text: str, context: str, rubric: str) -> JudgeEvalResult:
+        lowered = input_text.lower()
+        blocking = []
+        foreshadowing_score = 1.0
+        if "直接解释真相" in input_text or "提前泄露" in input_text:
+            blocking.append("文本可能提前泄露关键伏笔。")
+            foreshadowing_score = 0.4
+        return JudgeEvalResult(
+            scores={
+                "consistency": 0.9 if context else 0.7,
+                "character": 0.85 if "放弃" not in input_text and "give up" not in lowered else 0.5,
+                "foreshadowing": foreshadowing_score,
+                "style": 0.8 if rubric else 0.7,
+            },
+            blocking_findings=blocking,
+            reason="Mock judge 根据固定 rubric 给出可重复语义评分。",
         )

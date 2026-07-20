@@ -8,6 +8,318 @@
 
 ## P0
 
+### Agent 实习/工作面试核心能力补强
+
+状态：
+
+- 已完成基础 Agent 闭环：LangGraph 节点编排、任务/节点持久化、SSE、上下文预算、结构化记忆、RAG、基础 Eval、模型切换/路由、token/cost 估算、微调数据准备。
+- 面试和实习岗位还缺少更能体现“生产级 Agent 工程”的能力：混合检索、tokenizer 级上下文预算和用户反馈闭环。
+
+目标：
+
+- 把项目从“能跑的 LLM 应用”提升为“可观测、可评测、可恢复、可扩展工具能力的 Agent 系统”。
+- 后续 P0 开发优先选择能直接支撑面试表达的能力，优先处理剩余的混合检索、tokenizer 级上下文预算和用户反馈闭环。
+
+优先级建议：
+
+1. 混合检索 + reranker。
+2. tokenizer 级上下文预算。
+3. 用户反馈数据闭环。
+
+使用规则：
+
+- 每次只选一个小 P0 独立设计和开发。
+- 如果涉及已有模块，开发前必须先读对应 `docs/modules/` 文档。
+- 新增稳定模块时再补 `docs/modules/<module-name>.md`，不要为一次性脚本单独建模块文档。
+
+### Tool Calling / MCP 工具层
+
+状态：
+
+- 当前项目的 Agent 主要是固定 LangGraph 节点流程，LLM 通过节点调用模型或业务函数。
+- 还没有统一 Tool Registry、tool schema、工具调用参数校验、工具调用审计，也没有 MCP server/client 适配。
+
+目标：
+
+- 增加一个受控工具层，让 Agent 可以在节点内调用项目内部工具，而不是只能依赖预先写死的上下文。
+- 工具调用必须有 schema、参数校验、权限边界、调用记录、失败记录和耗时统计。
+- 工具不能直接污染正式数据库；涉及记忆更新时只能返回候选结果，正式写入仍走采纳路径。
+
+第一阶段建议：
+
+- 新增内部 `ToolRegistry`，先不直接接复杂 MCP。
+- 提供 3-5 个项目内工具：
+  - `search_memory(query, project_id)`：检索正式记忆。
+  - `get_chapter_summary(chapter_id)`：读取章节摘要。
+  - `list_open_foreshadowing(project_id)`：读取未回收/推进中的伏笔。
+  - `get_character_state(project_id, character_name)`：读取角色当前时期卡。
+  - `propose_memory_update(...)`：返回候选记忆更新，不直接写正式表。
+- 每次工具调用记录：task、step、tool_name、arguments、result 摘要、status、error、duration_ms。
+- 后续再适配 MCP，把这些内部工具暴露为 MCP tools 或接入外部 MCP server。
+
+验收方式：
+
+- 后台能看到某个节点调用了哪些工具、参数是什么、返回了什么摘要、是否失败。
+- 工具参数非法时不会调用业务逻辑。
+- 工具失败不会让已完成节点状态丢失。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
+- `docs/modules/retrieval.md`
+- 后续可新增 `docs/modules/tool-calling.md`
+
+### Agent Observability / Trace
+
+状态：
+
+- 当前已有 `GenerationTask`、`GenerationTaskStep.input_snapshot/output_snapshot`、模型 usage 和 Agent 后台节点展示。
+- 这属于可观测基础，但还不是完整 trace：没有统一 trace_id/span_id，也没有把 LLM call、RAG call、tool call 串成一棵 trace tree。
+
+目标：
+
+- 为每次 Agent 运行建立可追踪的 trace，覆盖任务、节点、LLM 调用、RAG 检索、工具调用、usage、错误和耗时。
+- 支持面试中讲清楚：一次生成为什么慢、哪里失败、用了哪些上下文、调用了哪些工具、成本是多少。
+
+第一阶段建议：
+
+- `GenerationTask` 增加或派生 `trace_id`。
+- 每个 `GenerationTaskStep` 视为一个 span。
+- LLM 调用、RAG 检索、Tool Calling 作为子 span 或独立 trace event 记录。
+- 前端 Agent 后台增加“Trace”视图，按树状展示：
+  - task
+  - step
+  - llm_call
+  - retrieval
+  - tool_call
+  - persistence
+- 暂不强依赖外部平台；后续可接 Langfuse、LangSmith 或 OpenTelemetry。
+
+验收方式：
+
+- 任意一次章节生成可以查看完整 trace。
+- trace 中能看到每个节点耗时、模型、估算 token、检索 query、召回条数、工具调用结果和错误。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
+- `docs/modules/model-provider.md`
+- `docs/modules/retrieval.md`
+- 后续可新增 `docs/modules/observability.md`
+
+### RAG Eval：召回率、MRR 和命中覆盖率
+
+状态：
+
+- 已完成基础 RAG：Qdrant、本地 embedding、正式记忆召回、上下文预算接入、后台召回展示。
+- 当前 Eval 只覆盖摘要事实保留率和审核冲突检出率，还没有证明 RAG 是否真的召回了该召回的旧信息。
+
+目标：
+
+- 建立 RAG 质量评测，不只证明“接了向量库”，还要证明“关键旧信息能被找回且排得靠前”。
+- 支持比较不同 embedding、query 构造、chunk 策略、混合检索和 reranker 的效果。
+
+指标：
+
+- `recall@k`：应该召回的相关文档中，有多少出现在 top k。
+- `precision@k`：top k 中有多少是真的相关文档。
+- `MRR`：第一个相关结果排名的倒数。
+- `hit_rate@k`：top k 是否至少命中一条相关文档。
+- `packed_recall@k`：召回结果最终进入 prompt 的比例，避免“召回了但被预算裁掉”。
+
+第一阶段建议：
+
+- 新增 `backend/app/evals/rag_cases.py`，维护少量人工 gold case。
+- 每个 case 包含：project fixture、query、expected source ids、top_k。
+- 新增 RAG eval runner，输出 recall@k、precision@k、MRR、hit_rate。
+- 前端 Eval 面板展示 RAG Eval 结果。
+
+验收方式：
+
+- 能运行固定 RAG gold cases。
+- 修改 query 构造或检索策略后，可以比较指标变化。
+
+涉及模块：
+
+- `docs/modules/retrieval.md`
+- `docs/modules/evaluation.md`
+
+### Prompt 版本记录与 Eval 对比
+
+状态：
+
+- 当前已保存 prompt package 快照和模型配置快照。
+- 还没有稳定的 prompt template version、prompt hash、context builder version，也不能按版本聚合 Eval。
+
+目标：
+
+- 每次生成任务保存实际使用的 prompt 模板版本、上下文构造版本、prompt hash 和关键参数。
+- 支持回看某次生成为什么会得到当前结果。
+- 支持比较不同 prompt 版本的生成质量、审核质量、RAG 使用效果和 Eval 指标。
+
+第一阶段建议：
+
+- 为每个节点 prompt 模板定义静态版本号，例如：
+  - `generate_prose@2026-07-20.v1`
+  - `audit_prose@2026-07-20.v1`
+  - `summarize_chapter@2026-07-20.v1`
+  - `judge_foreshadowing@2026-07-20.v1`
+- `GenerationTaskStep.output_snapshot` 或独立字段保存：
+  - `prompt_template`
+  - `prompt_version`
+  - `prompt_hash`
+  - `context_builder_version`
+- Eval runner 输出按 prompt_version 分组的结果。
+- 第一阶段不做复杂 prompt 管理后台，只做记录、回看和指标分组。
+
+验收方式：
+
+- 任意生成记录能看到每个模型节点用的 prompt 版本。
+- Eval 报告能按 prompt version 聚合，支持改 prompt 前后对比。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
+- `docs/modules/model-provider.md`
+- `docs/modules/evaluation.md`
+
+### LLM-as-judge 语义评测
+
+状态：
+
+- 当前 Eval 是确定性文本匹配，稳定、便宜、可重复。
+- 已完成轻量 LLM-as-judge 第一阶段：内置 Eval 可通过固定 judge case 和 rubric 输出语义评分、阻塞发现和理由，前端 Eval 面板可展示结果。
+- 当前 judge 只作为离线评测工具，不插入章节生成 11 节点流程，也不写数据库历史。
+
+目标：
+
+- 增加可版本化的 LLM judge，用 rubric 评估复杂语义质量。
+- LLM judge 只作为辅助评测，不替代确定性 gold case 和人工抽检。
+
+第一阶段建议：
+
+- 为摘要、审核、伏笔和角色判断分别定义 judge rubric。
+- judge prompt 固定版本，记录 judge model、prompt_version、输入输出和分数。
+- 输出结构化分数：
+  - consistency_score
+  - character_score
+  - foreshadowing_score
+  - style_score
+  - blocking_findings
+- 保留少量人工校准样例，避免 judge 漂移。
+
+验收方式：
+
+- 前端 Eval 面板能看到 LLM judge 评分和理由。
+- 同一批样例在同一 judge prompt/model 下可重复回放。
+
+涉及模块：
+
+- `docs/modules/evaluation.md`
+- `docs/modules/model-provider.md`
+
+### 混合检索与 reranker
+
+状态：
+
+- 当前 RAG 以向量检索为主。
+- 还没有关键词检索、混合召回、重排模型和多路召回融合。
+
+目标：
+
+- 提升 RAG 对专有名词、伏笔名、章节标题、角色名的召回稳定性。
+- 通过 reranker 提高 top k 排序质量，减少无关内容进入上下文预算。
+
+第一阶段建议：
+
+- 增加轻量关键词召回：按角色名、伏笔关键词、章节标题、状态字段匹配。
+- 与向量召回做 union，去重后保留来源和分数。
+- 暂不接重模型 reranker 时，可先做规则式 rerank：
+  - RAG 相似度。
+  - 关键词命中。
+  - 未回收伏笔优先。
+  - 当前角色优先。
+  - 最近章节优先。
+- 后续再接本地或外部 reranker。
+
+验收方式：
+
+- RAG Eval 指标可比较“纯向量”和“混合检索”的差异。
+- 后台能看到每条召回结果来源：vector、keyword、hybrid、reranked。
+
+涉及模块：
+
+- `docs/modules/retrieval.md`
+- `docs/modules/evaluation.md`
+
+### tokenizer 级上下文预算
+
+状态：
+
+- 当前上下文预算使用字符数或粗略 token 估算。
+- Agent 后台能看到预算占用，但这不是 provider 真实 tokenizer 结果。
+
+目标：
+
+- 将上下文预算从字符估算升级为 tokenizer 级或 provider usage 级估算。
+- 更准确地区分“模型上下文窗口”“最大输出 token”“系统主动上下文预算”。
+
+第一阶段建议：
+
+- 在 `model_provider` 或独立 `token_counter` 层提供统一 token 估算接口。
+- 无 tokenizer 时保留字符估算 fallback。
+- `load_context.context_budget` 同时记录：
+  - estimated_tokens
+  - estimated_chars
+  - model_max_tokens
+  - reserved_output_tokens
+  - context_budget_tokens
+- 前端显示“上下文预算占用”时明确这是估算值。
+
+验收方式：
+
+- 生成任务能看到本次上下文估算 token。
+- 调整模型最大输出 token 时，上下文预算预留空间随之变化。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
+- `docs/modules/model-provider.md`
+
+### 用户反馈数据闭环
+
+状态：
+
+- 当前已有采纳/拒绝生成记录，训练数据导出默认只导出已采纳记录。
+- 还没有系统化记录用户对正文、摘要、审核发现、伏笔建议、角色卡建议的细粒度反馈。
+
+目标：
+
+- 记录用户对生成正文、摘要、审核发现、伏笔建议、角色卡建议的采纳、拒绝和修改。
+- 将反馈沉淀为后续 eval、prompt 优化、检索优化或微调数据。
+- 区分用户审美修改、事实纠错、结构问题和随意改写，避免把所有修改都当成模型错误。
+
+第一阶段建议：
+
+- 新增反馈记录模型，至少包含：
+  - target_type：chapter / summary / audit / foreshadowing / character_period
+  - action：accepted / rejected / edited
+  - reason_type：style / factual_error / consistency / pacing / other
+  - before / after 摘要或 diff
+  - related_task_id / chapter_id
+- 先记录，不自动训练、不自动改 prompt。
+
+验收方式：
+
+- 用户采纳、拒绝或修改候选结果时，能保存反馈记录。
+- 训练数据导出可以选择性包含高质量反馈样本。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
+- `docs/modules/training-data.md`
+- 后续可新增 `docs/modules/feedback-loop.md`
+
 ### LLM 平滑切换
 
 状态：
@@ -174,7 +486,7 @@
 状态：
 
 - 已完成基础能力：确定性 eval 函数、摘要事实保留率、审核冲突检出率、内置 gold case、命令行回放 runner。
-- 后续细化：接入真实 `GenerationRun`、入库保存 eval 结果、precision/recall/F1、LLM-as-judge、前端报告。
+- 后续细化：接入真实 `GenerationRun`、入库保存 eval 结果、precision/recall/F1、前端报告历史趋势。
 
 目标：
 
@@ -284,59 +596,6 @@
 
 - 后续可新增轻量 `docs/modules/editor-workspace.md`
 
-### Prompt 版本记录
-
-目标：
-
-- 每次生成任务保存实际使用的 prompt 模板版本、上下文构造版本和关键参数。
-- 支持回看某次生成为什么会得到当前结果。
-- 支持后续比较不同 prompt 版本的生成质量和 eval 结果。
-
-第一阶段建议：
-
-- 先记录静态版本号和 prompt package 快照。
-- 不做复杂 prompt 管理后台。
-
-涉及模块：
-
-- `docs/modules/generation-flow.md`
-- `docs/modules/model-provider.md`
-
-### 更强的失败恢复和重试
-
-目标：
-
-- 失败后可以基于已完成节点快照继续执行，避免整章从头重跑。
-- 区分关键节点和非关键节点：正文生成、审核、候选保存失败应阻塞；部分判断节点失败可降级但必须记录。
-- 支持针对单个失败节点重试，并保留失败原因和重试次数。
-
-降级原因：
-
-- 当前已经有基础任务状态、失败记录和重试入口。
-- 节点级恢复和单节点重试属于可靠性增强，重要但不应优先于上下文和记忆系统。
-
-涉及模块：
-
-- `docs/modules/generation-flow.md`
-
-### 用户反馈数据闭环
-
-目标：
-
-- 记录用户对生成正文、摘要、审核发现、伏笔建议、角色卡建议的采纳、拒绝和修改。
-- 将反馈沉淀为后续 eval、prompt 优化、检索优化或微调数据。
-- 区分用户审美修改和事实纠错，避免把所有修改都当成模型错误。
-
-降级原因：
-
-- 反馈闭环需要先有稳定的结构化记忆和 eval 口径，否则采集的数据难以复用。
-- 第一版可以先靠生成记录和用户手动验收，不把反馈系统作为当前阻塞项。
-
-涉及模块：
-
-- `docs/modules/generation-flow.md`
-- 后续可新增 `docs/modules/feedback-loop.md`
-
 ### 项目级模型配置
 
 不同小说项目可以绑定不同默认模型。适合在全局 LLM 切换稳定后实现。
@@ -346,6 +605,46 @@
 角色卡、伏笔、摘要更新建议由用户逐条确认后再进入正式上下文。
 
 ## P2
+
+### 节点级恢复与单节点重试
+
+状态：
+
+- 当前已有任务状态、节点快照、失败记录和重试入口。
+- 重试时可以复用已完成节点的 `output_snapshot`，但还不是完整产品化的“从失败节点继续”和“单节点重试”。
+
+降级原因：
+
+- 当前整任务重试已经能支撑第一版闭环和基础失败恢复。
+- 单节点重试会涉及下游节点失效、回滚边界、尝试次数和用户操作入口，复杂度较高，当前不重要，降为 P2。
+
+目标：
+
+- 失败后可以基于已完成节点快照继续执行，避免整章从头重跑。
+- 支持针对单个失败节点重试，并保留失败原因、重试次数和每次尝试的快照。
+- 区分关键节点和非关键节点：正文生成、审核、候选保存失败应阻塞；部分判断节点失败可降级但必须记录。
+
+第一阶段建议：
+
+- `GenerationTaskStep` 增加或派生：
+  - `attempt_count`
+  - `retryable`
+  - `last_error_type`
+  - `last_error_message`
+- 新增单节点重试 API，例如：
+  - `POST /api/generation-tasks/{task_id}/steps/{step_name}/retry`
+- 前端失败节点显示“重试此节点”。
+- 明确哪些节点允许复用快照，哪些节点上下文变化后必须重算。
+
+验收方式：
+
+- 人为让某个节点失败后，前端能看到失败节点。
+- 点击单节点重试后，只重新执行失败节点及其后续依赖节点。
+- 已完成且允许复用的节点不会重复调用模型。
+
+涉及模块：
+
+- `docs/modules/generation-flow.md`
 
 ### 桌面端打包
 
