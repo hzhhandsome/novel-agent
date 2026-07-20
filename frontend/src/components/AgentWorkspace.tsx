@@ -243,7 +243,9 @@ function formatEvalPercent(value: number | undefined): string {
 
 function evalCaseSummary(report: BuiltinEvalReport | null): string {
   if (!report) return "";
-  const failedCases = [...report.summary.cases, ...report.audit.cases].filter((item) => !item.passed);
+  const failedCases = [...report.summary.cases, ...report.audit.cases, ...(report.rag?.cases ?? [])].filter(
+    (item) => !item.passed,
+  );
   if (failedCases.length === 0) return "所有内置样例通过";
   return failedCases
     .map((item) => {
@@ -677,6 +679,8 @@ export function AgentWorkspace({
               <div className="eval-metric-grid">
                 <span>摘要事实保留率 {formatEvalPercent(evalReport.summary.average_retention_rate)}</span>
                 <span>审核冲突检出率 {formatEvalPercent(evalReport.audit.average_recall_rate)}</span>
+                {evalReport.rag ? <span>RAG 召回率 {formatEvalPercent(evalReport.rag.average_recall_at_k)}</span> : null}
+                {evalReport.rag ? <span>RAG MRR {formatEvalPercent(evalReport.rag.average_mrr)}</span> : null}
               </div>
               <p>{evalCaseSummary(evalReport)}</p>
             </article>

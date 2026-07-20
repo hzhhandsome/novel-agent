@@ -136,6 +136,12 @@ export interface EvalMetricReport {
 export interface BuiltinEvalReport {
   summary: EvalMetricReport;
   audit: EvalMetricReport;
+  rag?: EvalMetricReport & {
+    average_recall_at_k?: number;
+    average_precision_at_k?: number;
+    average_hit_rate_at_k?: number;
+    average_mrr?: number;
+  };
   overall: {
     case_count: number;
     passed_count: number;

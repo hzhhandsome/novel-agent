@@ -454,7 +454,23 @@ describe("App", () => {
                   },
                 ],
               },
-              overall: { case_count: 4, passed_count: 2 },
+              rag: {
+                case_count: 1,
+                average_recall_at_k: 1,
+                average_precision_at_k: 0.333333,
+                average_hit_rate_at_k: 1,
+                average_mrr: 1,
+                passed_count: 1,
+                cases: [
+                  {
+                    case: "rag_case_1",
+                    passed: true,
+                    detected: ["红封书页未知批注"],
+                    missed: [],
+                  },
+                ],
+              },
+              overall: { case_count: 5, passed_count: 3 },
             }),
             { status: 200, headers: { "Content-Type": "application/json" } },
           ),
@@ -473,9 +489,11 @@ describe("App", () => {
     fireEvent.click(screen.getByRole("button", { name: "运行 Eval" }));
 
     expect(await screen.findByText("Eval 评测")).toBeInTheDocument();
-    expect(screen.getByText("通过 2 / 4")).toBeInTheDocument();
+    expect(screen.getByText("通过 3 / 5")).toBeInTheDocument();
     expect(screen.getByText("摘要事实保留率 75%")).toBeInTheDocument();
     expect(screen.getByText("审核冲突检出率 50%")).toBeInTheDocument();
+    expect(screen.getByText("RAG 召回率 100%")).toBeInTheDocument();
+    expect(screen.getByText("RAG MRR 100%")).toBeInTheDocument();
     expect(screen.getByText(/summary_case_1/)).toBeInTheDocument();
     expect(screen.getByText(/伏笔提前泄露/)).toBeInTheDocument();
   });

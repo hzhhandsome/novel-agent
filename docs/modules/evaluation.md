@@ -4,25 +4,28 @@
 
 评测模块负责用稳定样例衡量生成流程质量，避免只靠人工感觉判断摘要和审核是否可靠。
 
-当前第一阶段覆盖两个 P0 指标：
+当前第一阶段覆盖三个 P0 指标：
 
 - 摘要事实保留率：摘要是否保留预期关键事实。
 - 审核冲突检出率：审核发现是否命中预期冲突。
+- RAG 召回质量：关键旧信息是否出现在 top k，且排序是否靠前。
 
 ## 入口文件
 
 - `backend/app/services/evaluation.py`：纯评测函数。
 - `backend/app/evals/gold_cases.py`：内置 gold case。
+- `backend/app/evals/rag_cases.py`：内置 RAG retrieval gold case。
 - `backend/app/evals/run.py`：命令行回放入口。
 - `backend/tests/test_evaluation.py`：评测行为测试。
 
 ## 核心流程
 
-1. 在 gold case 中定义预期事实或预期冲突。
+1. 在 gold case 中定义预期事实、预期冲突或预期召回文档。
 2. 用模型输出、候选摘要或审核发现作为被评测文本。
-3. 评测函数按 label 和 alias 做确定性文本匹配。
+3. 摘要和审核评测函数按 label 和 alias 做确定性文本匹配。
 4. 输出每个 case 的命中项、遗漏项、通过阈值和指标分数。
-5. runner 汇总平均事实保留率、平均冲突检出率和通过数量。
+5. RAG Eval 使用固定 retrieval report 和 expected source id 计算 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
+6. runner 汇总平均事实保留率、平均冲突检出率、RAG 召回指标和通过数量。
 
 运行方式：
 
@@ -39,9 +42,15 @@ python -m app.evals.run
 
 - `summary.average_retention_rate`
 - `audit.average_recall_rate`
+- `rag.average_recall_at_k`
+- `rag.average_precision_at_k`
+- `rag.average_hit_rate_at_k`
+- `rag.average_mrr`
 - `overall.case_count`
 - `overall.passed_count`
 - 每个 case 的 `retained` / `missing` 或 `detected` / `missed`
+
+RAG Eval 第一阶段只使用内置固定 retrieval report，不读取真实项目数据库，也不直接调用 Qdrant。这样指标稳定、可重复，适合比较后续 query 构造、chunk 策略、混合检索和 reranker 改动。
 
 ## 扩展点
 
@@ -49,9 +58,10 @@ python -m app.evals.run
 
 - 读取真实 `GenerationRun` 作为被评测输出。
 - 把 eval 结果入库，用于比较 prompt、模型、RAG 策略。
-- precision、recall、F1 和 false positive 记录。
+- 摘要和审核的 precision、recall、F1 和 false positive 记录。
 - LLM-as-judge 或 embedding 语义匹配。
-- 前端评测报告页。
+- 读取真实 `GenerationRun` 和真实检索日志，计算在线 RAG Eval。
+- 前端评测报告页和历史趋势。
 
 ## 测试方式
 
@@ -85,10 +95,17 @@ python -m app.evals.run
 GET /api/evals/builtin
 ```
 
-该接口复用 `backend/app/evals/run.py` 的 `run_builtin_evals()`，返回结构与命令行 `python -m app.evals.run` 保持一致。当前接口只读取内置 gold cases，不写数据库。
+该接口复用 `backend/app/evals/run.py` 的 `run_builtin_evals()`，返回结构与命令行 `python -m app.evals.run` 保持一致。当前接口只读取内置 gold cases，不写数据库。RAG 部分读取内置固定 retrieval report，不依赖实时向量库状态。
 
 ## 2026-07-19 更新
 
 - 前端 Eval 报告继续显示在 Agent 后台“结果与更新”tab。
-- 当前 Eval 仍是确定性 gold case 文本匹配，用于摘要事实保留率和审核冲突检出率；不能宣称已经覆盖完整语义评测。
-- 后续如果要衡量 RAG 召回质量，应新增 recall@k / MRR 类指标，不要混入当前摘要和审核 Eval 指标。
+- 当前 Eval 仍以确定性 gold case 为主，用于摘要事实保留率、审核冲突检出率和固定 RAG 召回质量；不能宣称已经覆盖完整语义评测。
+- RAG 召回质量已作为独立指标输出，不混入摘要和审核 Eval 指标。
+
+## 2026-07-20 更新
+
+- 新增内置 RAG Eval，输出 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
+- `python -m app.evals.run` 和 `GET /api/evals/builtin` 均返回 `rag` 聚合结果。
+- 前端 Agent 后台“运行 Eval”后会展示 RAG 召回率和 RAG MRR。
+- 当前 RAG Eval 使用固定 retrieval report，后续再接真实检索日志和策略对比。

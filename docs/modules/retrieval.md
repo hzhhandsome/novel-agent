@@ -10,11 +10,13 @@
 - Docker 后端使用本地免费 embedding 模型 `BAAI/bge-small-zh-v1.5`。
 - 测试和本地默认使用确定性的 hash embedding，不依赖网络下载模型。
 - 检索结果进入上下文预算器，由预算器决定最终进入 prompt 的内容。
+- 已有内置 RAG Eval 第一阶段，用固定 gold retrieval report 评测 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
 
 ## 入口文件
 
 - `backend/app/services/embeddings.py`：embedding provider。
 - `backend/app/services/vector_memory.py`：本地向量检索和 Qdrant 检索。
+- `backend/app/evals/rag_cases.py`：固定 RAG 召回评测样例。
 - `backend/app/agent/chapter_graph.py`：`load_context` 构建查询、正式记忆文档并调用检索。
 - `frontend/src/components/AgentWorkspace.tsx`：Agent 后台展示 RAG 召回报告。
 - `docker-compose.yml`：Qdrant 服务和后端检索环境变量。
@@ -35,6 +37,7 @@
    - `disabled`：关闭检索，只保留上下文预算。
 5. 检索命中的候选优先进入上下文预算排序。
 6. `context_package.retrieval_results` 记录后端、查询、命中来源、分数和文本，供 Agent 后台调试。
+7. 内置 Eval 使用固定 retrieval report 验证“应该召回的旧信息是否出现在 top k”，用于后续比较 query、chunk、混合检索和 reranker 策略。
 
 ## 数据和状态
 
@@ -74,7 +77,7 @@ NOVEL_AGENT_EMBEDDING_DIMENSION=384
 - embedding 批处理和后台任务。
 - 混合检索：关键词 + 向量。
 - 重排模型。
-- recall@k、MRR、命中覆盖率等 eval。
+- 基于真实检索日志的在线 recall@k、MRR、命中覆盖率 eval。
 - 地点、物品、阵营等更多结构化实体。
 
 ## 测试方式
@@ -105,3 +108,9 @@ npm run build
 
 - Agent 后台顶部常驻显示本次 `load_context.context_budget` 的占用摘要，方便判断长篇生成时上下文是否接近预算上限。
 - RAG 召回结果仍在“上下文”tab 和 `load_context` 节点详情中展示；召回结果只影响候选优先级，最终是否进入 prompt 仍由上下文预算决定。
+
+## 2026-07-20 更新
+
+- 新增内置 RAG Eval 第一阶段：使用固定 retrieval report 计算 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
+- 该评测不读取真实项目数据库，也不调用 Qdrant；它用于稳定比较后续检索策略变更。
+- 真实检索日志评测、混合检索和 reranker 对比仍是后续扩展。

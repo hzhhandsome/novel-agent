@@ -1,6 +1,8 @@
 from app.services.evaluation import (
     ExpectedItem,
+    ExpectedRetrievedDocument,
     evaluate_audit_conflict_detection,
+    evaluate_rag_retrieval,
     evaluate_summary_fact_retention,
 )
 
@@ -45,6 +47,36 @@ def test_audit_conflict_detection_reports_missed_conflicts():
     assert result["missed"] == ["提前泄露伏笔"]
 
 
+def test_rag_retrieval_eval_reports_recall_precision_hit_rate_and_mrr():
+    result = evaluate_rag_retrieval(
+        retrieval_report={
+            "backend": "local_vector",
+            "query": "红封书来源和手背页码",
+            "hits": [
+                {"source": "chapter_summary", "source_id": "1", "text": "无关摘要", "score": 0.91},
+                {"source": "foreshadowing", "source_id": "red_page", "text": "红封书页留下未知批注", "score": 0.88},
+                {"source": "character", "source_id": "main", "text": "主角正在追查手背页码", "score": 0.81},
+            ],
+        },
+        expected_documents=[
+            ExpectedRetrievedDocument(source="foreshadowing", source_id="red_page", label="红封书页伏笔"),
+            ExpectedRetrievedDocument(source="world_rule", source_id="memory_cost", label="记忆代价规则"),
+        ],
+        top_k=3,
+        threshold=0.5,
+    )
+
+    assert result["metric"] == "rag_retrieval"
+    assert result["top_k"] == 3
+    assert result["detected"] == ["红封书页伏笔"]
+    assert result["missed"] == ["记忆代价规则"]
+    assert result["recall_at_k"] == 0.5
+    assert result["precision_at_k"] == 0.333333
+    assert result["hit_rate_at_k"] == 1.0
+    assert result["mrr"] == 0.5
+    assert result["passed"] is True
+
+
 def test_builtin_eval_runner_returns_aggregate_metrics():
     from app.evals.run import run_builtin_evals
 
@@ -54,7 +86,12 @@ def test_builtin_eval_runner_returns_aggregate_metrics():
     assert report["summary"]["average_retention_rate"] > 0
     assert report["audit"]["case_count"] >= 1
     assert report["audit"]["average_recall_rate"] > 0
-    assert report["overall"]["case_count"] == report["summary"]["case_count"] + report["audit"]["case_count"]
+    assert report["rag"]["case_count"] >= 1
+    assert report["rag"]["average_recall_at_k"] > 0
+    assert report["rag"]["average_mrr"] > 0
+    assert report["overall"]["case_count"] == (
+        report["summary"]["case_count"] + report["audit"]["case_count"] + report["rag"]["case_count"]
+    )
 
 
 def test_builtin_eval_api_returns_report(client_with_db):
@@ -64,4 +101,9 @@ def test_builtin_eval_api_returns_report(client_with_db):
     report = response.json()
     assert report["summary"]["case_count"] >= 1
     assert report["audit"]["case_count"] >= 1
-    assert report["overall"]["case_count"] == report["summary"]["case_count"] + report["audit"]["case_count"]
+    assert report["rag"]["case_count"] >= 1
+    assert report["rag"]["average_recall_at_k"] > 0
+    assert report["rag"]["average_mrr"] > 0
+    assert report["overall"]["case_count"] == (
+        report["summary"]["case_count"] + report["audit"]["case_count"] + report["rag"]["case_count"]
+    )
