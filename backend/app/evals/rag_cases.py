@@ -20,6 +20,7 @@ RAG_RETRIEVAL_CASES = [
         name="foreshadowing_memory_recall",
         retrieval_report={
             "backend": "gold_case",
+            "strategy": "hybrid_reranked",
             "query": "红封书来源和关键同伴隐瞒",
             "hits": [
                 {

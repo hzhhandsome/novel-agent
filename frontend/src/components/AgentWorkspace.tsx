@@ -197,10 +197,23 @@ function formatRetrievalResults(value: unknown): string {
     .map((hit) => {
       if (!hit || typeof hit !== "object" || Array.isArray(hit)) return "";
       const item = hit as Record<string, unknown>;
+      const metadata = getNestedRecord(item, "metadata");
       const source = stringifyValue(item.source);
       const score = stringifyValue(item.score);
+      const retrievalSource = stringifyValue(item.retrieval_source) || stringifyValue(metadata.retrieval_source);
+      const ranker = stringifyValue(item.ranker) || stringifyValue(metadata.ranker);
+      const matchedTerms = stringifyValue(item.matched_terms) || stringifyValue(metadata.matched_terms);
       const text = stringifyValue(item.text);
-      return [source, score ? `score=${score}` : "", text].filter(Boolean).join("：");
+      return [
+        source,
+        retrievalSource ? `retrieval=${retrievalSource}` : "",
+        ranker ? `ranker=${ranker}` : "",
+        matchedTerms ? `matched=${matchedTerms}` : "",
+        score ? `score=${score}` : "",
+        text,
+      ]
+        .filter(Boolean)
+        .join("：");
     })
     .filter(Boolean)
     .join("；");
@@ -756,6 +769,12 @@ export function AgentWorkspace({
                 <span>审核冲突检出率 {formatEvalPercent(evalReport.audit.average_recall_rate)}</span>
                 {evalReport.rag ? <span>RAG 召回率 {formatEvalPercent(evalReport.rag.average_recall_at_k)}</span> : null}
                 {evalReport.rag ? <span>RAG MRR {formatEvalPercent(evalReport.rag.average_mrr)}</span> : null}
+                {evalReport.rag?.strategy_groups?.[0] ? (
+                  <span>
+                    RAG 策略 {evalReport.rag.strategy_groups[0].strategy}{" "}
+                    {formatEvalPercent(evalReport.rag.strategy_groups[0].average_recall_at_k)}
+                  </span>
+                ) : null}
                 {evalReport.judge ? <span>Judge 语义分 {formatEvalPercent(evalReport.judge.average_score)}</span> : null}
                 {evalReport.judge ? (
                   <span>

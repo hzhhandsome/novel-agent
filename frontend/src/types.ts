@@ -155,6 +155,16 @@ export interface EvalMetricReport {
   cases: EvalCaseResult[];
 }
 
+export interface RagStrategyGroup {
+  strategy: string;
+  case_count: number;
+  passed_count: number;
+  average_recall_at_k?: number;
+  average_precision_at_k?: number;
+  average_hit_rate_at_k?: number;
+  average_mrr?: number;
+}
+
 export interface PromptVersionGroup {
   prompt_version: string;
   case_count: number;
@@ -169,6 +179,7 @@ export interface BuiltinEvalReport {
     average_precision_at_k?: number;
     average_hit_rate_at_k?: number;
     average_mrr?: number;
+    strategy_groups?: RagStrategyGroup[];
   };
   judge?: EvalMetricReport & {
     average_score?: number;

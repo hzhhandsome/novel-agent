@@ -108,6 +108,10 @@ def test_builtin_eval_runner_returns_aggregate_metrics():
     assert report["rag"]["case_count"] >= 1
     assert report["rag"]["average_recall_at_k"] > 0
     assert report["rag"]["average_mrr"] > 0
+    assert report["rag"]["strategy_groups"]
+    assert report["rag"]["strategy_groups"][0]["strategy"]
+    assert "average_recall_at_k" in report["rag"]["strategy_groups"][0]
+    assert "average_mrr" in report["rag"]["strategy_groups"][0]
     assert report["judge"]["case_count"] >= 1
     assert report["judge"]["average_score"] > 0
     assert report["overall"]["case_count"] == (
@@ -128,6 +132,8 @@ def test_builtin_eval_api_returns_report(client_with_db):
     assert report["rag"]["case_count"] >= 1
     assert report["rag"]["average_recall_at_k"] > 0
     assert report["rag"]["average_mrr"] > 0
+    assert report["rag"]["strategy_groups"]
+    assert report["rag"]["strategy_groups"][0]["strategy"]
     assert report["judge"]["case_count"] >= 1
     assert report["judge"]["average_score"] > 0
     assert report["overall"]["case_count"] == (

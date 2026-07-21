@@ -461,6 +461,17 @@ describe("App", () => {
                 average_hit_rate_at_k: 1,
                 average_mrr: 1,
                 passed_count: 1,
+                strategy_groups: [
+                  {
+                    strategy: "hybrid_reranked",
+                    case_count: 1,
+                    passed_count: 1,
+                    average_recall_at_k: 1,
+                    average_precision_at_k: 0.333333,
+                    average_hit_rate_at_k: 1,
+                    average_mrr: 1,
+                  },
+                ],
                 cases: [
                   {
                     case: "rag_case_1",
@@ -513,6 +524,7 @@ describe("App", () => {
     expect(screen.getByText("审核冲突检出率 50%")).toBeInTheDocument();
     expect(screen.getByText("RAG 召回率 100%")).toBeInTheDocument();
     expect(screen.getByText("RAG MRR 100%")).toBeInTheDocument();
+    expect(screen.getByText("RAG 策略 hybrid_reranked 100%")).toBeInTheDocument();
     expect(screen.getByText("Judge 语义分 80%")).toBeInTheDocument();
     expect(screen.getByText("Judge 通过 0 / 1")).toBeInTheDocument();
     expect(screen.getByText("Prompt 版本 builtin_eval@2026-07-20.v1")).toBeInTheDocument();
@@ -616,7 +628,8 @@ describe("App", () => {
               chapter_summaries: ["真实摘要"],
               inspirations: ["真实灵感"],
               retrieval_results: {
-                backend: "local_vector",
+                backend: "hybrid_reranked:local_vector",
+                strategy: "hybrid_reranked",
                 query: "废城 图书馆 修书",
                 hits: [
                   {
@@ -624,7 +637,18 @@ describe("App", () => {
                     source_id: "7",
                     score: 0.82,
                     text: "RELEVANT_EVENT_MARKER 手背页码在废城图书馆出现。",
-                    metadata: { source_chapter_id: 2 },
+                    retrieval_source: "hybrid",
+                    ranker: "rule_rerank",
+                    matched_terms: ["废城", "图书馆"],
+                    vector_score: 0.7,
+                    keyword_score: 0.8,
+                    rerank_score: 0.82,
+                    metadata: {
+                      source_chapter_id: 2,
+                      retrieval_source: "hybrid",
+                      ranker: "rule_rerank",
+                      matched_terms: ["废城", "图书馆"],
+                    },
                   },
                 ],
               },
@@ -866,6 +890,8 @@ describe("App", () => {
     expect(screen.getByText(/被裁剪的旧摘要/)).toBeInTheDocument();
     expect(screen.getByText(/local_vector/)).toBeInTheDocument();
     expect(screen.getByText(/废城 图书馆 修书/)).toBeInTheDocument();
+    expect(screen.getByText(/retrieval=hybrid/)).toBeInTheDocument();
+    expect(screen.getByText(/ranker=rule_rerank/)).toBeInTheDocument();
     expect(screen.getByText(/RELEVANT_EVENT_MARKER/)).toBeInTheDocument();
 
     fireEvent.click(screen.getByRole("tab", { name: "结果与更新" }));

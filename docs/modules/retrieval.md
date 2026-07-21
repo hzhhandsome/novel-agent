@@ -4,18 +4,19 @@
 
 检索召回模块负责在章节生成前，从正式记忆中找出和当前章节最相关的旧信息，减少长篇生成时只靠最近摘要导致的遗忘和幻觉。
 
-当前第一阶段是向量 RAG：
+当前第一阶段是混合 RAG：
 
 - Docker 运行使用 Qdrant 作为向量数据库。
 - Docker 后端使用本地免费 embedding 模型 `BAAI/bge-small-zh-v1.5`。
 - 测试和本地默认使用确定性的 hash embedding，不依赖网络下载模型。
+- 检索时会同时执行向量召回和轻量关键词召回，再做 deterministic rule rerank。
 - 检索结果进入上下文预算器，由预算器决定最终进入 prompt 的内容。
 - 已有内置 RAG Eval 第一阶段，用固定 gold retrieval report 评测 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
 
 ## 入口文件
 
 - `backend/app/services/embeddings.py`：embedding provider。
-- `backend/app/services/vector_memory.py`：本地向量检索和 Qdrant 检索。
+- `backend/app/services/vector_memory.py`：本地向量检索、Qdrant 检索、关键词召回和混合重排。
 - `backend/app/evals/rag_cases.py`：固定 RAG 召回评测样例。
 - `backend/app/agent/chapter_graph.py`：`load_context` 构建查询、正式记忆文档并调用检索。
 - `frontend/src/components/AgentWorkspace.tsx`：Agent 后台展示 RAG 召回报告。
@@ -31,17 +32,20 @@
    - 世界观规则。
    - 角色时期卡。
    - 伏笔条目。
-4. 根据配置选择检索后端：
+4. 根据配置选择向量检索后端：
    - `local`：用 hash embedding 在进程内排序，主要用于测试和轻量本地运行。
    - `qdrant`：把正式记忆 upsert 到 Qdrant，再按 `project_id` 过滤召回 top K。
    - `disabled`：关闭检索，只保留上下文预算。
-5. 检索命中的候选优先进入上下文预算排序。
-6. `context_package.retrieval_results` 记录后端、查询、命中来源、分数和文本，供 Agent 后台调试。
-7. 内置 Eval 使用固定 retrieval report 验证“应该召回的旧信息是否出现在 top k”，用于后续比较 query、chunk、混合检索和 reranker 策略。
+5. 当后端不是 `disabled` 时，执行关键词召回，按 query term 命中文档正文和 metadata。
+6. 将向量命中和关键词命中按 `source/source_id` 去重合并，标记 `retrieval_source=vector|keyword|hybrid`。
+7. 规则式 reranker 结合向量分、关键词分、未回收伏笔、角色卡和最近章节/事件等信号，写入 `ranker=rule_rerank` 和 `rerank_score`。
+8. 检索命中的候选优先进入上下文预算排序。
+9. `context_package.retrieval_results` 记录后端、策略、查询、命中来源、分数、匹配词和文本，供 Agent 后台调试。
+10. 内置 Eval 使用固定 retrieval report 验证“应该召回的旧信息是否出现在 top k”，并按 strategy 聚合指标。
 
 ## 数据和状态
 
-检索文档不新增业务数据库表。向量点的稳定 id 由 `project_id/source/source_id` 生成，保证重复 upsert 不产生重复数据。
+检索文档不新增业务数据库表。向量点的稳定 id 由 `project_id/source/source_id` 生成，保证重复 upsert 不产生重复数据。关键词召回只读取同一批正式记忆文档，不单独建索引表。
 
 Qdrant payload 包含：
 
@@ -75,8 +79,7 @@ NOVEL_AGENT_EMBEDDING_DIMENSION=384
 
 - 专门的索引重建 API。
 - embedding 批处理和后台任务。
-- 混合检索：关键词 + 向量。
-- 重排模型。
+- 外部或本地重排模型。
 - 基于真实检索日志的在线 recall@k、MRR、命中覆盖率 eval。
 - 地点、物品、阵营等更多结构化实体。
 
@@ -103,6 +106,7 @@ npm run build
 - 新增检索来源后，必须明确它是否是正式记忆，并同步上下文预算分区。
 - Qdrant 失败不能阻塞基础生成；当前实现会回退到本地向量排序。
 - 更换 embedding 模型时必须同步 `NOVEL_AGENT_EMBEDDING_DIMENSION`。
+- 修改关键词提取、融合权重或 rerank 规则时，应同步检查 RAG Eval strategy groups 和 Agent 后台召回展示。
 
 ## 2026-07-19 更新
 
@@ -114,3 +118,10 @@ npm run build
 - 新增内置 RAG Eval 第一阶段：使用固定 retrieval report 计算 `recall@k`、`precision@k`、`hit_rate@k` 和 `MRR`。
 - 该评测不读取真实项目数据库，也不调用 Qdrant；它用于稳定比较后续检索策略变更。
 - 真实检索日志评测、混合检索和 reranker 对比仍是后续扩展。
+
+## 2026-07-21 更新
+
+- 新增轻量混合检索：`retrieve_hybrid_memory()` 将向量召回和关键词召回 union 后做规则式 rerank。
+- `load_context` 已改为使用混合检索；`disabled` 后端仍保持无召回。
+- `retrieval_results.hits[]` 新增 `retrieval_source`、`ranker`、`matched_terms`、`vector_score`、`keyword_score` 和 `rerank_score`。
+- Agent 后台 RAG 召回展示会显示每条命中的来源和 reranker。

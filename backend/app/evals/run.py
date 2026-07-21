@@ -38,6 +38,7 @@ def run_builtin_evals() -> dict[str, Any]:
         {
             "case": case.name,
             "prompt_version": PROMPT_TEMPLATE_VERSIONS["builtin_eval"],
+            "strategy": str(case.retrieval_report.get("strategy") or case.retrieval_report.get("backend") or "unknown"),
             **evaluate_rag_retrieval(
                 case.retrieval_report,
                 case.expected_documents,
@@ -87,6 +88,7 @@ def run_builtin_evals() -> dict[str, Any]:
             "average_hit_rate_at_k": _average(item["hit_rate_at_k"] for item in rag_results),
             "average_mrr": _average(item["mrr"] for item in rag_results),
             "passed_count": sum(1 for item in rag_results if item["passed"]),
+            "strategy_groups": _rag_strategy_groups(rag_results),
             "cases": rag_results,
         },
         "judge": {
@@ -128,6 +130,25 @@ def _prompt_version_groups(results: list[dict[str, Any]]) -> dict[str, Any]:
         "case_count": len(results),
         "groups": list(groups.values()),
     }
+
+
+def _rag_strategy_groups(results: list[dict[str, Any]]) -> list[dict[str, Any]]:
+    groups: dict[str, list[dict[str, Any]]] = {}
+    for item in results:
+        strategy = str(item.get("strategy") or "unknown")
+        groups.setdefault(strategy, []).append(item)
+    return [
+        {
+            "strategy": strategy,
+            "case_count": len(items),
+            "passed_count": sum(1 for item in items if item.get("passed")),
+            "average_recall_at_k": _average(item["recall_at_k"] for item in items),
+            "average_precision_at_k": _average(item["precision_at_k"] for item in items),
+            "average_hit_rate_at_k": _average(item["hit_rate_at_k"] for item in items),
+            "average_mrr": _average(item["mrr"] for item in items),
+        }
+        for strategy, items in sorted(groups.items())
+    ]
 
 
 if __name__ == "__main__":

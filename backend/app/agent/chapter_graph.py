@@ -17,7 +17,7 @@ from app.services.model_usage import estimate_model_usage
 from app.services.prompt_versions import prompt_metadata
 from app.services.provider_factory import get_model_provider_from_snapshot
 from app.services.tool_registry import get_internal_tool_registry
-from app.services.vector_memory import VectorMemoryDocument, retrieve_vector_memory
+from app.services.vector_memory import VectorMemoryDocument, retrieve_hybrid_memory
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
 
@@ -472,7 +472,7 @@ def _build_vector_memory_documents(
 
 def _retrieve_context(project_id: int, query: str, documents: list[VectorMemoryDocument]) -> dict:
     try:
-        return retrieve_vector_memory(project_id, query, documents)
+        return retrieve_hybrid_memory(project_id, query, documents)
     except Exception as exc:
         return {"backend": "unavailable", "query": query, "hits": [], "error": str(exc)}
 

@@ -49,6 +49,9 @@ python -m app.evals.run
 - `rag.average_precision_at_k`
 - `rag.average_hit_rate_at_k`
 - `rag.average_mrr`
+- `rag.strategy_groups[].strategy`
+- `rag.strategy_groups[].average_recall_at_k`
+- `rag.strategy_groups[].average_mrr`
 - `judge.average_score`
 - `judge.passed_count`
 - `overall.case_count`
@@ -125,3 +128,4 @@ GET /api/evals/builtin
 - 新增 `prompt_versions` 聚合，内置 Eval 结果会按 `builtin_eval@2026-07-20.v1` 分组，后续可用于比较不同 prompt/rubric 版本。
 - 新增轻量 LLM-as-judge Eval，`python -m app.evals.run` 和 `GET /api/evals/builtin` 均返回 `judge` 聚合结果。
 - 前端 Agent 后台 Eval 卡展示 Judge 语义分、通过数量和阻塞发现。
+- RAG Eval 新增 `strategy_groups`，用于按 `hybrid_reranked` 等策略聚合 recall、precision、hit rate 和 MRR。
