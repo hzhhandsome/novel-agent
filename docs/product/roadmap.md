@@ -13,17 +13,16 @@
 状态：
 
 - 已完成基础 Agent 闭环：LangGraph 节点编排、任务/节点持久化、SSE、上下文预算、结构化记忆、RAG、基础 Eval、模型切换/路由、token/cost 估算、微调数据准备。
-- 面试和实习岗位还缺少更能体现“生产级 Agent 工程”的能力：tokenizer 级上下文预算和用户反馈闭环。
+- 面试和实习岗位还缺少更能体现“生产级 Agent 工程”的能力：用户反馈闭环。
 
 目标：
 
 - 把项目从“能跑的 LLM 应用”提升为“可观测、可评测、可恢复、可扩展工具能力的 Agent 系统”。
-- 后续 P0 开发优先选择能直接支撑面试表达的能力，优先处理剩余的 tokenizer 级上下文预算和用户反馈闭环。
+- 后续 P0 开发优先选择能直接支撑面试表达的能力，优先处理剩余的用户反馈闭环。
 
 优先级建议：
 
-1. tokenizer 级上下文预算。
-2. 用户反馈数据闭环。
+1. 用户反馈数据闭环。
 
 使用规则：
 
@@ -256,23 +255,24 @@
 
 状态：
 
-- 当前上下文预算使用字符数或粗略 token 估算。
-- Agent 后台能看到预算占用，但这不是 provider 真实 tokenizer 结果。
+- 已完成第一阶段 tokenizer 级上下文预算：新增统一 `token_counter`，`load_context.context_budget` 记录估算 token、字符数、模型最大 token、输出预留、固定提示预留、上下文预算和 fallback 状态。
+- Agent 后台顶部和上下文 tab 会明确显示“tokens（估算）”；无本地 tokenizer 时使用确定性字符启发式 fallback。
 
 目标：
 
 - 将上下文预算从字符估算升级为 tokenizer 级或 provider usage 级估算。
 - 更准确地区分“模型上下文窗口”“最大输出 token”“系统主动上下文预算”。
 
-第一阶段建议：
+第一阶段实现：
 
-- 在 `model_provider` 或独立 `token_counter` 层提供统一 token 估算接口。
-- 无 tokenizer 时保留字符估算 fallback。
+- 在独立 `token_counter` 层提供统一 token 估算接口。
+- 无本地 tokenizer 时保留字符估算 fallback。
 - `load_context.context_budget` 同时记录：
   - estimated_tokens
   - estimated_chars
   - model_max_tokens
   - reserved_output_tokens
+  - fixed_prompt_reserve_tokens
   - context_budget_tokens
 - 前端显示“上下文预算占用”时明确这是估算值。
 

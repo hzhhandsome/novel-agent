@@ -99,10 +99,12 @@ API key 仍只保存在运行时内存中，不返回前端，也不写入默认
 
 第一阶段 prompt 版本信息保存在现有 JSON 快照中，不新增独立 prompt 表，也不改变 provider 接口。
 
-估算 token 当前使用确定性字符启发式，不依赖外部 tokenizer。成本单价通过环境变量配置，默认 0：
+估算 token 当前通过 `backend/app/services/token_counter.py` 统一计算。默认使用确定性字符启发式；当 `NOVEL_AGENT_TOKENIZER_PROVIDER=transformers` 且 `NOVEL_AGENT_TOKENIZER_MODEL` 可从本地缓存加载时，使用本地 tokenizer 估算。成本单价通过环境变量配置，默认 0：
 
 - `NOVEL_AGENT_MODEL_INPUT_COST_PER_1K`
 - `NOVEL_AGENT_MODEL_OUTPUT_COST_PER_1K`
+- `NOVEL_AGENT_TOKENIZER_PROVIDER`
+- `NOVEL_AGENT_TOKENIZER_MODEL`
 
 后续如果 provider 返回真实 usage，应在 provider/usage 层替换估算值，不改变业务层字段形状。
 
@@ -147,7 +149,7 @@ rg -n "sk-[A-Za-z0-9]" .env.example backend/app backend/tests
 
 - “模型最大 token”表示一次模型调用中输入和输出共享的窗口上限。
 - “上下文预算”是系统主动分配给长期记忆、摘要、伏笔、灵感等上下文的预算，应小于模型最大 token，并为系统提示、本章目标和正文输出预留空间。
-- Agent 后台顶部显示的上下文占用来自 `load_context.context_budget`，用于观察上下文是否接近预算上限；当前仍是粗略估算，不等同于 provider 返回的真实 tokenizer 计数。
+- Agent 后台顶部显示的上下文占用来自 `load_context.context_budget`，用于观察上下文是否接近预算上限；当前是 tokenizer 或 fallback 估算值，不等同于 provider 返回的真实 usage。
 
 ## 2026-07-20 更新
 

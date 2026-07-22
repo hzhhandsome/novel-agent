@@ -16,12 +16,18 @@ from app.services.model_provider import ModelProvider
 from app.services.model_usage import estimate_model_usage
 from app.services.prompt_versions import prompt_metadata
 from app.services.provider_factory import get_model_provider_from_snapshot
+from app.services.token_counter import TokenCountResult, count_tokens
 from app.services.tool_registry import get_internal_tool_registry
 from app.services.vector_memory import VectorMemoryDocument, retrieve_hybrid_memory
 
 NodeFn = Callable[[ChapterGenerationState], ChapterGenerationState]
 
-TOTAL_CONTEXT_BUDGET = 6000
+DEFAULT_MODEL_MAX_TOKENS = 4096
+MAX_RESERVED_OUTPUT_TOKENS = 2048
+MIN_RESERVED_OUTPUT_TOKENS = 512
+MAX_FIXED_PROMPT_RESERVE_TOKENS = 1200
+MIN_FIXED_PROMPT_RESERVE_TOKENS = 400
+MIN_CONTEXT_BUDGET_TOKENS = 256
 SECTION_BUDGETS = {
     "chapter_summaries": 1600,
     "story_events": 1200,
@@ -42,7 +48,7 @@ def build_chapter_generation_graph(
     audit_provider = _provider_for_route(provider, model_config_snapshot, "audit")
     summary_provider = _provider_for_route(provider, model_config_snapshot, "summary")
 
-    workflow.add_node("load_context", _persisted_step(session, "load_context", _load_context(session)))
+    workflow.add_node("load_context", _persisted_step(session, "load_context", _load_context(session, model_config_snapshot)))
     workflow.add_node("build_chapter_target", _persisted_step(session, "build_chapter_target", _build_chapter_target))
     workflow.add_node("build_prompt_package", _persisted_step(session, "build_prompt_package", _build_prompt_package))
     workflow.add_node(
@@ -248,7 +254,7 @@ def _snapshot_state(state: ChapterGenerationState) -> dict:
     }
 
 
-def _load_context(session: Session) -> NodeFn:
+def _load_context(session: Session, model_config_snapshot: dict | None = None) -> NodeFn:
     def run(state: ChapterGenerationState) -> ChapterGenerationState:
         chapter = session.get_one(Chapter, state["chapter_id"])
         project = chapter.project
@@ -335,7 +341,7 @@ def _load_context(session: Session) -> NodeFn:
         }
         retrieval_results = _retrieve_context(project.id, retrieval_query, retrieval_documents)
         ranked_candidates = _rank_candidates_by_retrieval(candidates, retrieval_results.get("hits", []))
-        budgeted = _build_context_budget(ranked_candidates)
+        budgeted = _build_context_budget(ranked_candidates, model_config_snapshot)
         foreshadowing_items = budgeted["included"]["foreshadowing_items"]
         world_rules = budgeted["included"]["world_rules"]
         summaries = budgeted["included"]["chapter_summaries"]
@@ -498,57 +504,102 @@ def _rank_candidates_by_retrieval(candidates: dict[str, list], hits: list[dict])
     return ranked
 
 
-def _build_context_budget(candidates: dict[str, list]) -> dict:
+def _build_context_budget(candidates: dict[str, list], model_config_snapshot: dict | None = None) -> dict:
     included: dict[str, list] = {}
     omitted: dict[str, list[str]] = {}
     sections: list[dict] = []
-    total_used = 0
+    total_used_tokens = 0
+    total_used_chars = 0
+    budget_settings = _derive_context_budget_settings(model_config_snapshot)
 
     for name, items in candidates.items():
-        budget = SECTION_BUDGETS.get(name, 1000)
-        kept, skipped, used = _fit_items(items, budget)
+        budget = _section_budget_tokens(name, budget_settings["context_budget_tokens"])
+        kept, skipped, used_tokens, used_chars = _fit_items(items, budget)
         included[name] = kept
         omitted[name] = skipped
-        total_used += used
+        total_used_tokens += used_tokens
+        total_used_chars += used_chars
         sections.append(
             {
                 "name": name,
                 "budget": budget,
-                "used": used,
+                "used": used_tokens,
+                "budget_tokens": budget,
+                "used_tokens": used_tokens,
+                "used_chars": used_chars,
                 "included_count": len(kept),
                 "omitted_count": len(skipped),
             }
         )
 
+    counter_sample = count_tokens("")
     return {
         "included": included,
         "report": {
-            "total_budget": TOTAL_CONTEXT_BUDGET,
-            "used": min(total_used, TOTAL_CONTEXT_BUDGET),
+            "model_max_tokens": budget_settings["model_max_tokens"],
+            "reserved_output_tokens": budget_settings["reserved_output_tokens"],
+            "fixed_prompt_reserve_tokens": budget_settings["fixed_prompt_reserve_tokens"],
+            "context_budget_tokens": budget_settings["context_budget_tokens"],
+            "estimated_tokens": min(total_used_tokens, budget_settings["context_budget_tokens"]),
+            "estimated_chars": total_used_chars,
+            "counter_name": counter_sample.counter_name,
+            "is_fallback": counter_sample.is_fallback,
+            "total_budget": budget_settings["context_budget_tokens"],
+            "used": min(total_used_tokens, budget_settings["context_budget_tokens"]),
             "sections": sections,
             "omitted": omitted,
         },
     }
 
 
-def _fit_items(items: list, budget: int) -> tuple[list, list[str], int]:
+def _derive_context_budget_settings(model_config_snapshot: dict | None) -> dict[str, int]:
+    model_max_tokens = int((model_config_snapshot or {}).get("max_tokens") or settings.model_max_tokens or DEFAULT_MODEL_MAX_TOKENS)
+    reserved_output_tokens = min(
+        MAX_RESERVED_OUTPUT_TOKENS,
+        max(MIN_RESERVED_OUTPUT_TOKENS, round(model_max_tokens * 0.35)),
+    )
+    fixed_prompt_reserve_tokens = min(
+        MAX_FIXED_PROMPT_RESERVE_TOKENS,
+        max(MIN_FIXED_PROMPT_RESERVE_TOKENS, round(model_max_tokens * 0.15)),
+    )
+    context_budget_tokens = max(
+        MIN_CONTEXT_BUDGET_TOKENS,
+        model_max_tokens - reserved_output_tokens - fixed_prompt_reserve_tokens,
+    )
+    return {
+        "model_max_tokens": model_max_tokens,
+        "reserved_output_tokens": reserved_output_tokens,
+        "fixed_prompt_reserve_tokens": fixed_prompt_reserve_tokens,
+        "context_budget_tokens": context_budget_tokens,
+    }
+
+
+def _section_budget_tokens(name: str, context_budget_tokens: int) -> int:
+    total_weight = sum(SECTION_BUDGETS.values())
+    weight = SECTION_BUDGETS.get(name, 1000)
+    return max(1, round(context_budget_tokens * weight / total_weight))
+
+
+def _fit_items(items: list, budget: int) -> tuple[list, list[str], int, int]:
     kept = []
     skipped: list[str] = []
-    used = 0
+    used_tokens = 0
+    used_chars = 0
 
     for item in items:
-        size = _rough_context_size(item)
-        if used + size <= budget or not kept:
+        size = _context_item_size(item)
+        if used_tokens + size.tokens <= budget or not kept:
             kept.append(item)
-            used += size
+            used_tokens += size.tokens
+            used_chars += size.chars
         else:
             skipped.append(_compact_omitted_item(item))
 
-    return kept, skipped, used
+    return kept, skipped, used_tokens, used_chars
 
 
-def _rough_context_size(value) -> int:
-    return len(_context_item_text(value))
+def _context_item_size(value) -> TokenCountResult:
+    return count_tokens(_context_item_text(value))
 
 
 def _compact_omitted_item(value) -> str:

@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     embedding_dimension: int = 384
     model_input_cost_per_1k: float = 0.0
     model_output_cost_per_1k: float = 0.0
+    tokenizer_provider: str = "heuristic"
+    tokenizer_model: str = "BAAI/bge-small-zh-v1.5"
 
     model_config = SettingsConfigDict(
         env_file="../.env",

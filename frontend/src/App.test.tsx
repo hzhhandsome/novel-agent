@@ -655,11 +655,22 @@ describe("App", () => {
               context_budget: {
                 total_budget: 6000,
                 used: 4200,
+                model_max_tokens: 8192,
+                reserved_output_tokens: 2048,
+                fixed_prompt_reserve_tokens: 1200,
+                context_budget_tokens: 6000,
+                estimated_tokens: 4200,
+                estimated_chars: 7800,
+                counter_name: "heuristic_chars_div_2",
+                is_fallback: true,
                 sections: [
                   {
                     name: "chapter_summaries",
                     budget: 1600,
                     used: 1200,
+                    budget_tokens: 1600,
+                    used_tokens: 1200,
+                    used_chars: 2200,
                     included_count: 3,
                     omitted_count: 7,
                   },
@@ -849,7 +860,7 @@ describe("App", () => {
     expect(screen.getByText("上下文包已加载，预算和召回信息可在下方查看。")).toBeInTheDocument();
     expect(screen.getByText(/估算 token：520/)).toBeInTheDocument();
     expect(screen.getByText(/估算成本：0.5/)).toBeInTheDocument();
-    expect(screen.getByText(/上下文 4200 \/ 6000/)).toBeInTheDocument();
+    expect(screen.getByText(/上下文 4200 \/ 6000 tokens（估算，fallback）/)).toBeInTheDocument();
     expect(screen.getByText("工具调用")).toBeInTheDocument();
     expect(screen.getByText(/list_open_foreshadowing/)).toBeInTheDocument();
 

@@ -37,7 +37,7 @@
 
 `load_context` 先完整读取正式上下文，再对可变上下文做规则式预算裁剪。核心设定和角色当前时期保留在固定上下文中；章节摘要、事件时间线、作者灵感、伏笔和世界观规则按分区预算进入最终 prompt。
 
-当前第一阶段使用字符数作为粗略预算单位：
+当前第一阶段使用统一 `token_counter` 估算 token 作为预算单位；如果本地 tokenizer 不可用，会退回确定性字符启发式 fallback，并在 `context_budget.is_fallback` 中标记：
 
 - `chapter_summaries`：优先保留最近章节摘要。
 - `story_events`：优先保留最近写入的事件。
@@ -45,7 +45,7 @@
 - `foreshadowing_items`：保留预算内伏笔条目。
 - `world_rules`：保留预算内世界观规则。
 
-预算报告写入 `context_package.context_budget`，包含总预算、各分区已用量、纳入数量、裁剪数量和被裁剪内容摘要。Agent 后台上下文视图应展示该报告，方便排查章节增多后的幻觉来源。当前预算器会保证每个非空分区至少保留一条内容；RAG 检索结果会先调整候选优先级，再由预算器决定是否进入 prompt。
+预算报告写入 `context_package.context_budget`，包含模型最大 token、输出预留 token、固定提示预留 token、可变上下文预算 token、估算 token、估算字符数、计数器名称、fallback 状态、各分区已用 token/字符、纳入数量、裁剪数量和被裁剪内容摘要。兼容字段 `total_budget` 和 `used` 仍保留，但含义是估算 token。Agent 后台上下文视图应展示该报告，方便排查章节增多后的幻觉来源。当前预算器会保证每个非空分区至少保留一条内容；RAG 检索结果会先调整候选优先级，再由预算器决定是否进入 prompt。
 
 ### RAG 召回
 

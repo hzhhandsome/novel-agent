@@ -1,7 +1,8 @@
 from __future__ import annotations
 
-import math
 from typing import Any
+
+from app.services.token_counter import count_tokens
 
 
 def estimate_model_usage(
@@ -29,9 +30,7 @@ def estimate_model_usage(
 
 
 def estimate_tokens(text: str) -> int:
-    if not text:
-        return 0
-    return max(1, math.ceil(len(text) / 2))
+    return count_tokens(text).tokens
 
 
 def aggregate_model_usage(snapshots: list[dict | None]) -> dict[str, Any]:

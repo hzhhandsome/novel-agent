@@ -3,6 +3,7 @@ import re
 from app.models.chapter import Chapter, ChapterStatus
 from app.models.memory import StoryEvent
 from app.services.chapter_service import generate_chapter_candidate
+from app.services.provider_factory import update_runtime_model_config
 
 
 def test_load_context_applies_budget_and_omits_old_summaries(client_with_db):
@@ -54,9 +55,16 @@ def test_load_context_applies_budget_and_omits_old_summaries(client_with_db):
     prompt_step = next(step for step in task.steps if step.name == "build_prompt_package")
     prompt_package = prompt_step.output_snapshot["prompt_package"]
 
-    assert budget["total_budget"] == 6000
+    assert budget["model_max_tokens"] == 4096
+    assert budget["reserved_output_tokens"] > 0
+    assert budget["fixed_prompt_reserve_tokens"] > 0
+    assert budget["context_budget_tokens"] == budget["total_budget"]
+    assert budget["estimated_tokens"] == budget["used"]
+    assert budget["estimated_chars"] > 0
+    assert budget["counter_name"]
     assert budget["used"] <= budget["total_budget"]
     assert budget["sections"]
+    assert all("used_tokens" in section and "used_chars" in section for section in budget["sections"])
     assert budget["omitted"]["chapter_summaries"]
     assert budget["omitted"]["story_events"]
     assert len(package["chapter_summaries"]) < 14
@@ -68,3 +76,25 @@ def test_load_context_applies_budget_and_omits_old_summaries(client_with_db):
     assert omitted_event_markers
     assert all(marker not in prompt_package for marker in omitted_summary_markers)
     assert all(marker not in prompt_package for marker in omitted_event_markers)
+
+
+def test_context_budget_uses_task_model_max_tokens(client_with_db):
+    update_runtime_model_config(provider="mock", max_tokens=2048, api_key="", routes={"generation": None, "audit": None, "summary": None})
+    project = client_with_db.post("/api/projects", json={"idea": "一座钟楼每晚倒退一分钟"}).json()
+    override_session = next(iter(client_with_db.app.dependency_overrides.values()))
+    session_generator = override_session()
+    session = next(session_generator)
+
+    try:
+        task = generate_chapter_candidate(session, project["chapters"][0]["id"])
+    finally:
+        update_runtime_model_config(provider="mock", max_tokens=4096, api_key="", routes={"generation": None, "audit": None, "summary": None})
+        session_generator.close()
+
+    load_context = next(step for step in task.steps if step.name == "load_context")
+    budget = load_context.output_snapshot["context_package"]["context_budget"]
+
+    assert budget["model_max_tokens"] == 2048
+    assert budget["reserved_output_tokens"] < 2048
+    assert budget["context_budget_tokens"] < 2048
+    assert budget["context_budget_tokens"] == budget["total_budget"]

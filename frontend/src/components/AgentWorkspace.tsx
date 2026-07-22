@@ -158,14 +158,23 @@ function getNestedRecord(source: Record<string, unknown>, key: string): Record<s
 function formatContextBudget(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const budget = value as Record<string, unknown>;
-  const used = stringifyValue(budget.used) || "0";
-  const total = stringifyValue(budget.total_budget) || "0";
+  const used = stringifyValue(budget.estimated_tokens ?? budget.used) || "0";
+  const total = stringifyValue(budget.context_budget_tokens ?? budget.total_budget) || "0";
+  const chars = stringifyValue(budget.estimated_chars);
+  const modelMax = stringifyValue(budget.model_max_tokens);
+  const reservedOutput = stringifyValue(budget.reserved_output_tokens);
+  const fixedReserve = stringifyValue(budget.fixed_prompt_reserve_tokens);
+  const counterName = stringifyValue(budget.counter_name);
+  const fallback = budget.is_fallback ? "fallback" : "";
   const sections = Array.isArray(budget.sections) ? budget.sections : [];
   const sectionText = sections
     .map((section) => {
       if (!section || typeof section !== "object" || Array.isArray(section)) return "";
       const item = section as Record<string, unknown>;
-      return `${stringifyValue(item.name)}：${stringifyValue(item.included_count)} 入选 / ${stringifyValue(item.omitted_count)} 裁剪`;
+      const sectionUsed = stringifyValue(item.used_tokens ?? item.used);
+      const sectionBudget = stringifyValue(item.budget_tokens ?? item.budget);
+      const sectionChars = stringifyValue(item.used_chars);
+      return `${stringifyValue(item.name)}：${stringifyValue(item.included_count)} 入选 / ${stringifyValue(item.omitted_count)} 裁剪，${sectionUsed} / ${sectionBudget} tokens${sectionChars ? `，${sectionChars} chars` : ""}`;
     })
     .filter(Boolean)
     .join("；");
@@ -174,17 +183,28 @@ function formatContextBudget(value: unknown): string {
     .map(([name, items]) => `${name}：${stringifyValue(items)}`)
     .filter((item) => item.trim() !== "")
     .join("；");
-  return [`${used} / ${total}`, sectionText, omittedText].filter(Boolean).join("；");
+  const header = `${used} / ${total} tokens（估算）`;
+  const meta = [
+    modelMax ? `模型最大 ${modelMax}` : "",
+    reservedOutput ? `输出预留 ${reservedOutput}` : "",
+    fixedReserve ? `固定提示预留 ${fixedReserve}` : "",
+    chars ? `${chars} chars` : "",
+    counterName ? `计数器 ${counterName}` : "",
+    fallback,
+  ]
+    .filter(Boolean)
+    .join("；");
+  return [header, meta, sectionText, omittedText].filter(Boolean).join("；");
 }
 
 function formatContextBudgetHeader(value: unknown): string {
   if (!value || typeof value !== "object" || Array.isArray(value)) return "";
   const budget = value as Record<string, unknown>;
-  const used = Number(budget.used ?? 0);
-  const total = Number(budget.total_budget ?? 0);
+  const used = Number(budget.estimated_tokens ?? budget.used ?? 0);
+  const total = Number(budget.context_budget_tokens ?? budget.total_budget ?? 0);
   if (!total) return "";
-  const percent = Math.round((used / total) * 100);
-  return `上下文 ${used} / ${total}（${percent}%）`;
+  const fallback = budget.is_fallback ? "，fallback" : "";
+  return `上下文 ${used} / ${total} tokens（估算${fallback}）`;
 }
 
 function formatRetrievalResults(value: unknown): string {
